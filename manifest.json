@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Profile Autofill",
+  "version": "0.1.0",
+  "description": "Review and fill job application forms using verified profile data.",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": ["https://generativelanguage.googleapis.com/*"],
+  "background": { "service_worker": "src/background/service-worker.js", "type": "module" },
+  "action": { "default_title": "Profile Autofill", "default_popup": "src/dashboard/index.html" },
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["src/content/content-script.js"],
+    "css": ["src/content/review-ui.css"],
+    "run_at": "document_idle"
+  }]
+}

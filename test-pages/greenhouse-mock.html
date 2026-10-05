@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Greenhouse Mock - Full Stack Developer</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; background: #fafafa; color: #222; }
+    .gh-header { border-bottom: 2px solid #00b22d; padding-bottom: 16px; margin-bottom: 24px; }
+    .gh-title { font-size: 24px; font-weight: 700; color: #111; }
+    .gh-company { font-size: 15px; color: #008726; font-weight: 600; margin-top: 4px; }
+    .field { margin-bottom: 18px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #333; }
+    .field input[type="text"], .field input[type="email"], .field input[type="tel"], .field textarea {
+      width: 100%; padding: 8px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; box-sizing: border-box;
+    }
+    .gh-submit { background: #00b22d; color: white; border: none; padding: 12px 28px; border-radius: 4px; font-weight: 700; font-size: 14px; cursor: pointer; }
+    .back { display: inline-block; margin-bottom: 16px; color: #008726; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="gh-header">
+    <div class="gh-title app-title">Full Stack Developer</div>
+    <div class="gh-company company-name">Stripe Technologies &bull; Remote / India</div>
+  </div>
+
+  <form id="application_form" onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered!');">
+    <div class="field">
+      <label for="first_name">First Name <span class="asterisk">*</span></label>
+      <input type="text" id="first_name" name="job_application[first_name]" autocomplete="given-name" required>
+    </div>
+
+    <div class="field">
+      <label for="last_name">Last Name <span class="asterisk">*</span></label>
+      <input type="text" id="last_name" name="job_application[last_name]" autocomplete="family-name" required>
+    </div>
+
+    <div class="field">
+      <label for="email">Email <span class="asterisk">*</span></label>
+      <input type="email" id="email" name="job_application[email]" autocomplete="email" required>
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone <span class="asterisk">*</span></label>
+      <input type="tel" id="phone" name="job_application[phone]" autocomplete="tel" required>
+    </div>
+
+    <div class="field">
+      <label for="resume">Resume/CV <span class="asterisk">*</span></label>
+      <input type="file" id="resume" name="job_application[resume]">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_0_text_value">LinkedIn Profile</label>
+      <input type="text" id="job_application_answers_attributes_0_text_value" name="job_application[answers_attributes][0][text_value]">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_1_text_value">GitHub Profile</label>
+      <input type="text" id="job_application_answers_attributes_1_text_value" name="job_application[answers_attributes][1][text_value]">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_2_text_value">Are you legally authorized to work in India?</label>
+      <input type="text" id="job_application_answers_attributes_2_text_value" name="job_application[answers_attributes][2][text_value]" placeholder="Yes / No">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_3_text_value">Will you require visa sponsorship?</label>
+      <input type="text" id="job_application_answers_attributes_3_text_value" name="job_application[answers_attributes][3][text_value]" placeholder="Yes / No">
+    </div>
+
+    <div class="field">
+      <label for="job_application_answers_attributes_4_text_value">Why do you want to work at Stripe?</label>
+      <textarea id="job_application_answers_attributes_4_text_value" name="job_application[answers_attributes][4][text_value]" rows="4"></textarea>
+    </div>
+
+    <button type="submit" class="gh-submit">Submit application</button>
+  </form>
+</body>
+</html>

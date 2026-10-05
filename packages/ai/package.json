@@ -1,0 +1,21 @@
+{
+  "name": "@applyflow/ai",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@google/genai": "^2.22.0",
+    "@applyflow/types": "workspace:*",
+    "@applyflow/validators": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

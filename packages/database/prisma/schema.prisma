@@ -1,0 +1,208 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String?
+  profile      Profile?
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Profile {
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName          String
+  firstName         String
+  lastName          String
+  preferredName     String?
+  email             String
+  phone             String
+  city              String
+  state             String
+  country           String
+  pincode           String
+  linkedin          String?
+  github            String?
+  portfolio         String?
+  summary           String?
+  tenthPercentage   String?
+  twelfthPercentage String?
+  twelfthStream     String?
+  jobPreference     JobPreference?
+  workAuthorization WorkAuthorization?
+  education         Education[]
+  experience        Experience[]
+  projects          Project[]
+  skills            Skill[]
+  resumes           Resume[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+model JobPreference {
+  id                   String   @id @default(uuid())
+  profileId            String   @unique
+  profile              Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetRoles          String[]
+  employmentTypes      String[]
+  preferredLocations   String[]
+  willingToRelocate    Boolean  @default(true)
+  willingToWorkRemotely Boolean @default(true)
+  noticePeriod         String
+  expectedSalaryMin    Int?
+  expectedSalaryMax    Int?
+  salaryCurrency       String   @default("INR")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model WorkAuthorization {
+  id                        String   @id @default(uuid())
+  profileId                 String   @unique
+  profile                   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  indiaAuthorized           Boolean  @default(true)
+  indiaSponsorshipRequired  Boolean  @default(false)
+  usAuthorized              Boolean  @default(true)
+  usSponsorshipRequired     Boolean  @default(true)
+  europeAuthorized          Boolean  @default(true)
+  europeSponsorshipRequired Boolean  @default(true)
+  otherDetails              String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model Education {
+  id                 String   @id @default(uuid())
+  profileId          String
+  profile            Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  degree             String
+  branch             String
+  university         String
+  location           String
+  startDate          String
+  endDate            String?
+  expectedGraduation String?
+  cgpa               String?
+  percentage         String?
+  stream             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Experience {
+  id               String   @id @default(uuid())
+  profileId        String
+  profile          Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company          String
+  title            String
+  employmentType   String
+  location         String
+  workMode         String
+  startDate        String
+  endDate          String?
+  current          Boolean  @default(false)
+  responsibilities String[]
+  technologies     String[]
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Project {
+  id                 String   @id @default(uuid())
+  profileId          String
+  profile            Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title              String
+  description        String
+  technologies       String[]
+  features           String[]
+  securityHighlights String[]
+  url                String?
+  githubUrl          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Skill {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  category  String   // e.g., 'programming', 'frontend', 'backend', 'database', etc.
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Resume {
+  id             String        @id @default(uuid())
+  profileId      String
+  profile        Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name           String
+  fileName       String
+  fileData       String?       // base64 or storage url
+  fileType       String?       // application/pdf
+  targetRoles    String[]
+  relevantSkills String[]
+  isDefault      Boolean       @default(false)
+  applications   Application[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Application {
+  id             String             @id @default(uuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company        String
+  role           String
+  url            String
+  date           String
+  resumeUsedId   String?
+  resumeUsed     Resume?            @relation(fields: [resumeUsedId], references: [id], onDelete: SetNull)
+  fieldsFilled   Int                @default(0)
+  aiAnswersCount Int                @default(0)
+  status         String             @default("Draft") // Draft, Reviewed, Applied, Rejected, Interview, Offer
+  notes          String?
+  fields         ApplicationField[]
+  aiAnswers      AIAnswer[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model ApplicationField {
+  id                    String      @id @default(uuid())
+  applicationId         String
+  application           Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  detectedLabel         String
+  fieldType             String
+  suggestedProfileField String?
+  confidence            Float
+  source                String      // deterministic, ai, manual
+  suggestedValue        String?
+  userValue             String?
+  approved              Boolean     @default(false)
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+}
+
+model AIAnswer {
+  id             String      @id @default(uuid())
+  applicationId  String?
+  application    Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  question       String
+  classification String      // BEHAVIORAL, PROJECT, etc.
+  confidence     Float
+  answer         String
+  reason         String?
+  sourceIds      String[]
+  createdAt      DateTime    @default(now())
+}

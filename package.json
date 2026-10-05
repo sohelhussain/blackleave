@@ -1,0 +1,24 @@
+{
+  "name": "blackleave-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.10.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev:api": "pnpm --filter @applyflow/api dev",
+    "dev:web": "pnpm --filter @applyflow/web dev",
+    "dev:ext": "pnpm --filter @applyflow/extension dev",
+    "build:ext": "pnpm --filter @applyflow/extension build",
+    "test": "node --test packages/autofill/tests/*.test.ts packages/ai/tests/*.test.ts apps/api/tests/api.test.ts",
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "lint": "pnpm typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.4",
+    "typescript": "^5.4.5"
+  }
+}

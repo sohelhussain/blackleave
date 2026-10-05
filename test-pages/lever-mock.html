@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Lever Mock - Backend Engineer</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; background: #ffffff; color: #333; }
+    .posting-headline h2 { font-size: 26px; font-weight: 700; margin-bottom: 4px; color: #111; }
+    .posting-categories { font-size: 14px; color: #666; margin-bottom: 30px; }
+    .section { margin-bottom: 24px; }
+    .section h4 { font-size: 15px; font-weight: 700; border-bottom: 1px solid #eee; padding-bottom: 8px; margin-bottom: 16px; color: #111; }
+    .field-row { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #444; }
+    input[type="text"], input[type="email"], input[type="tel"], textarea {
+      width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; box-sizing: border-box;
+    }
+    .lever-btn { background: #1b85f2; color: white; border: none; padding: 12px 30px; border-radius: 4px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .back { display: inline-block; margin-bottom: 16px; color: #1b85f2; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="main-header-logo">
+    <img src="" alt="Figma" style="display:none;">
+  </div>
+
+  <div class="posting-headline">
+    <h2>Backend Engineer</h2>
+    <div class="posting-categories">Figma &bull; Platform Engineering &bull; Remote</div>
+  </div>
+
+  <form class="application-form" onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered!');">
+    <div class="section">
+      <h4>SUBMIT YOUR APPLICATION</h4>
+
+      <div class="field-row">
+        <label>Full Name <span>✱</span></label>
+        <input type="text" name="name" required placeholder="Full name">
+      </div>
+
+      <div class="field-row">
+        <label>Email <span>✱</span></label>
+        <input type="email" name="email" required placeholder="Email address">
+      </div>
+
+      <div class="field-row">
+        <label>Phone <span>✱</span></label>
+        <input type="tel" name="phone" required placeholder="Phone number">
+      </div>
+
+      <div class="field-row">
+        <label>Current company</label>
+        <input type="text" name="org" placeholder="Current company">
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>LINKS</h4>
+
+      <div class="field-row">
+        <label>LinkedIn URL</label>
+        <input type="text" name="urls[LinkedIn]" placeholder="LinkedIn profile link">
+      </div>
+
+      <div class="field-row">
+        <label>GitHub URL</label>
+        <input type="text" name="urls[GitHub]" placeholder="GitHub profile link">
+      </div>
+
+      <div class="field-row">
+        <label>Portfolio URL</label>
+        <input type="text" name="urls[Portfolio]" placeholder="Portfolio link">
+      </div>
+    </div>
+
+    <div class="section">
+      <h4>ADDITIONAL INFORMATION</h4>
+
+      <div class="field-row">
+        <label>Tell us about a technical project you are proud of</label>
+        <textarea name="comments" rows="5" placeholder="Project details and impact..."></textarea>
+      </div>
+    </div>
+
+    <button type="submit" class="lever-btn">Submit Application</button>
+  </form>
+</body>
+</html>

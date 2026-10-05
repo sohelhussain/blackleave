@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Application with Select Dropdowns</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; background: #f8fafc; color: #1e293b; }
+    .card { background: white; padding: 32px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #334155; }
+    select, input { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; box-sizing: border-box; background: white; }
+    .btn { background: #0284c7; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 12px; }
+    .back { display: inline-block; margin-bottom: 16px; color: #0284c7; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="card">
+    <h2>Job Application - Dropdown Select Tests</h2>
+    <p style="color:#64748b; font-size:13px; margin-bottom:20px;">Tests matching values against select dropdown options.</p>
+
+    <form onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered!');">
+      <div class="form-group">
+        <label for="name">Full Name</label>
+        <input type="text" id="name" name="name" placeholder="Full name">
+      </div>
+
+      <div class="form-group">
+        <label for="degree">Highest Degree</label>
+        <select id="degree" name="degree">
+          <option value="">-- Please Select --</option>
+          <option value="B.Tech">Bachelor of Technology</option>
+          <option value="B.Sc">Bachelor of Science</option>
+          <option value="B.Pharma">Bachelor's Degree / B.Pharma</option>
+          <option value="Master of Computer Applications">Master of Computer Applications (MCA)</option>
+          <option value="M.Tech">Master of Technology</option>
+          <option value="PhD">Doctorate</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="relocate">Willing to relocate</label>
+        <select id="relocate" name="relocate">
+          <option value="">-- Please Select --</option>
+          <option value="Yes">Yes</option>
+          <option value="No">No</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="country">Country</label>
+        <select id="country" name="country">
+          <option value="">-- Please Select --</option>
+          <option value="United States">United States</option>
+          <option value="India">India</option>
+          <option value="Germany">Germany</option>
+          <option value="United Kingdom">United Kingdom</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="notice">Notice Period</label>
+        <select id="notice" name="notice">
+          <option value="">-- Please Select --</option>
+          <option value="Immediate">Immediate</option>
+          <option value="15 days">15 days</option>
+          <option value="30 days">30 days</option>
+          <option value="60 days">60 days</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn">Submit Application</button>
+    </form>
+  </div>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Application with Radio Buttons</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; background: #f8fafc; color: #1e293b; }
+    .card { background: white; padding: 32px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .form-group { margin-bottom: 20px; }
+    .group-label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #334155; }
+    .radio-options { display: flex; gap: 24px; }
+    .radio-options label { display: flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; color: #1e293b; }
+    input[type="text"] { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+    .btn { background: #0284c7; color: white; border: none; padding: 10px 24px; border-radius: 6px; font-weight: 700; font-size: 13px; cursor: pointer; }
+    .back { display: inline-block; margin-bottom: 16px; color: #0284c7; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="card">
+    <h2>Work Authorization Questionnaire (Radio Buttons)</h2>
+    <p style="color:#64748b; font-size:13px; margin-bottom:24px;">Tests group-based radio button selection from user profile work authorization flags.</p>
+
+    <form onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered!');">
+      <div class="form-group">
+        <label class="group-label">Candidate Full Name</label>
+        <input type="text" name="full_name" placeholder="Full name">
+      </div>
+
+      <div class="form-group">
+        <span class="group-label">Are you legally authorized to work in India?</span>
+        <div class="radio-options">
+          <label><input type="radio" name="india_auth" value="Yes"> Yes</label>
+          <label><input type="radio" name="india_auth" value="No"> No</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="group-label">Will you require sponsorship for employment in India?</span>
+        <div class="radio-options">
+          <label><input type="radio" name="india_spon" value="Yes"> Yes</label>
+          <label><input type="radio" name="india_spon" value="No"> No</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="group-label">Are you legally authorized to work in the United States?</span>
+        <div class="radio-options">
+          <label><input type="radio" name="us_auth" value="Yes"> Yes</label>
+          <label><input type="radio" name="us_auth" value="No"> No</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="group-label">Will you now or in the future require visa sponsorship for employment in the United States?</span>
+        <div class="radio-options">
+          <label><input type="radio" name="us_spon" value="Yes"> Yes</label>
+          <label><input type="radio" name="us_spon" value="No"> No</label>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <span class="group-label">Are you open to working remotely?</span>
+        <div class="radio-options">
+          <label><input type="radio" name="remote_work" value="Yes"> Yes</label>
+          <label><input type="radio" name="remote_work" value="No"> No</label>
+        </div>
+      </div>
+
+      <button type="submit" class="btn">Submit Questionnaire</button>
+    </form>
+  </div>
+</body>
+</html>

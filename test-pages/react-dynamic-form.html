@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>React Dynamic Form Test</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; background: #f8fafc; color: #0f172a; }
+    .box { background: white; padding: 28px; border-radius: 12px; border: 1px solid #e2e8f0; }
+    .form-group { margin-bottom: 14px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #334155; }
+    input, textarea { width: 100%; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+    .state-inspector { background: #0f172a; color: #38bdf8; padding: 14px; border-radius: 8px; font-family: monospace; font-size: 11px; margin-top: 20px; white-space: pre-wrap; }
+    .btn { background: #0284c7; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; }
+    .back { display: inline-block; margin-bottom: 16px; color: #0284c7; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function ApplicationForm() {
+      const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        linkedin: '',
+        whyJoin: ''
+      });
+      const [showDynamicStep, setShowDynamicStep] = useState(false);
+      const [dynamicExperience, setDynamicExperience] = useState('');
+
+      return (
+        <div className="box">
+          <h2 style={{ fontSize: '20px', fontWeight: '800', marginBottom: '4px' }}>React Controlled Form Application</h2>
+          <p style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>
+            This form uses React 18 controlled components. Direct DOM assignment without native property descriptors would normally be discarded by React. ApplyFlow AI native setters verify full framework reactivity!
+          </p>
+
+          <form onSubmit={(e) => { e.preventDefault(); alert('Manual Form Submission Triggered!'); }}>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>First Name</label>
+                <input
+                  type="text"
+                  name="firstName"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  placeholder="First name"
+                />
+              </div>
+
+              <div className="form-group" style={{ flex: 1 }}>
+                <label>Last Name</label>
+                <input
+                  type="text"
+                  name="lastName"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  placeholder="Last name"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Email Address</label>
+              <input
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="Email address"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Phone Number</label>
+              <input
+                type="tel"
+                name="phone"
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                placeholder="Phone number"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>LinkedIn Profile URL</label>
+              <input
+                type="url"
+                name="linkedin"
+                value={formData.linkedin}
+                onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
+                placeholder="LinkedIn URL"
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Why do you want to join our company?</label>
+              <textarea
+                rows="3"
+                value={formData.whyJoin}
+                onChange={(e) => setFormData({ ...formData, whyJoin: e.target.value })}
+                placeholder="Company motivation..."
+              />
+            </div>
+
+            {/* Dynamic Step Toggle to test MutationObserver */}
+            <div style={{ margin: '16px 0', padding: '12px', background: '#f1f5f9', borderRadius: '8px' }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setShowDynamicStep(!showDynamicStep)}
+              >
+                {showDynamicStep ? 'Hide Dynamic Questions' : '+ Reveal Dynamic Next-Step Questions'}
+              </button>
+
+              {showDynamicStep && (
+                <div style={{ marginTop: '12px' }}>
+                  <div className="form-group">
+                    <label>Tell us about a challenging engineering problem you solved</label>
+                    <textarea
+                      rows="3"
+                      value={dynamicExperience}
+                      onChange={(e) => setDynamicExperience(e.target.value)}
+                      placeholder="Describe the technical challenge and outcome..."
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button type="submit" className="btn" style={{ padding: '10px 20px', fontSize: '13px' }}>
+              Submit Application
+            </button>
+          </form>
+
+          <div className="state-inspector">
+            <strong>React State Inspector (Verifies synthetic event synchronization):</strong>
+            {JSON.stringify({ ...formData, dynamicExperience }, null, 2)}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<ApplicationForm />);
+  </script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Software Engineer Intern - Google Forms</title>
+  <style>
+    body {
+      font-family: Roboto, Arial, sans-serif;
+      background-color: #f0ebf8;
+      margin: 0;
+      padding: 20px;
+      color: #202124;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+    }
+    .back {
+      display: inline-block;
+      margin-bottom: 16px;
+      color: #673ab7;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    .form-card {
+      background: #fff;
+      border: 1px solid #dadce0;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 24px;
+      position: relative;
+    }
+    .header-card {
+      border-top: 10px solid #673ab7;
+    }
+    .header-title {
+      font-size: 32px;
+      font-weight: 400;
+      line-height: 40px;
+      margin-bottom: 12px;
+    }
+    .header-desc {
+      font-size: 14px;
+      color: #5f6368;
+      line-height: 20px;
+    }
+    .required-notice {
+      color: #d93025;
+      font-size: 12px;
+      margin-top: 12px;
+    }
+    .question-card {
+      padding: 24px;
+    }
+    .question-title {
+      font-size: 16px;
+      font-weight: 400;
+      letter-spacing: .1px;
+      line-height: 24px;
+      color: #202124;
+      margin-bottom: 16px;
+    }
+    .required-asterisk {
+      color: #d93025;
+    }
+    .whsOnd {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #dadce0;
+      padding: 8px 0;
+      font-size: 14px;
+      outline: none;
+      transition: border-bottom 0.2s ease;
+    }
+    .whsOnd:focus {
+      border-bottom: 2px solid #673ab7;
+    }
+    .KHxj8b {
+      width: 100%;
+      min-height: 60px;
+      border: none;
+      border-bottom: 1px solid #dadce0;
+      padding: 8px 0;
+      font-size: 14px;
+      outline: none;
+      resize: vertical;
+      font-family: inherit;
+    }
+    .KHxj8b:focus {
+      border-bottom: 2px solid #673ab7;
+    }
+    .radiogroup {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .radio-circle {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid #5f6368;
+      position: relative;
+    }
+    .radio-option[aria-checked="true"] .radio-circle {
+      border-color: #673ab7;
+    }
+    .radio-option[aria-checked="true"] .radio-circle::after {
+      content: "";
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: #673ab7;
+      border-radius: 50%;
+      top: 4px;
+      left: 4px;
+    }
+    .submit-btn {
+      background-color: #673ab7;
+      color: white;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+    <div class="form-card header-card">
+      <div role="heading" aria-level="1" class="header-title F9vfv">Software Engineer Intern</div>
+      <div class="header-desc I3Scbe">ApplyFlow AI verification form for internship candidates. Please fill out all required fields.</div>
+      <div class="required-notice">* Indicates required question</div>
+    </div>
+
+    <form id="mG61Hd" action="https://docs.google.com/forms/u/0/d/e/sample/formResponse" method="POST" onsubmit="event.preventDefault(); alert('Manual Submission!');">
+      <!-- Question 1: Full Name -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="1">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i1">
+          Full Name <span class="required-asterisk v3DuG" aria-label="Required question">*</span>
+        </div>
+        <div class="oJeWuf">
+          <input type="text" class="whsOnd zHQkBf" jsname="YPqjbf" name="entry.1000001" aria-labelledby="i1 i2" autocomplete="off" placeholder="Your answer" required>
+        </div>
+      </div>
+
+      <!-- Question 2: Email Address -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="2">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i3">
+          Email Address <span class="required-asterisk v3DuG" aria-label="Required question">*</span>
+        </div>
+        <div class="oJeWuf">
+          <input type="email" class="whsOnd zHQkBf" jsname="YPqjbf" name="entry.1000002" aria-labelledby="i3 i4" autocomplete="off" placeholder="Your answer" required>
+        </div>
+      </div>
+
+      <!-- Question 3: Phone Number -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="3">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i5">
+          Phone Number <span class="required-asterisk v3DuG" aria-label="Required question">*</span>
+        </div>
+        <div class="oJeWuf">
+          <input type="tel" class="whsOnd zHQkBf" jsname="YPqjbf" name="entry.1000003" aria-labelledby="i5 i6" autocomplete="off" placeholder="Your answer" required>
+        </div>
+      </div>
+
+      <!-- Question 4: If selected, how soon would you be able to join? -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="4">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i7">
+          If selected, how soon would you be able to join? <span class="required-asterisk v3DuG" aria-label="Required question">*</span>
+        </div>
+        <div class="oJeWuf">
+          <div role="radiogroup" aria-labelledby="i7" class="radiogroup">
+            <div role="radio" class="radio-option" aria-checked="false" aria-label="15 days" data-value="15 days" tabindex="0">
+              <div class="radio-circle"></div>
+              <span class="aDTYNe">15 days</span>
+            </div>
+            <div role="radio" class="radio-option" aria-checked="false" aria-label="30 days" data-value="30 days" tabindex="-1">
+              <div class="radio-circle"></div>
+              <span class="aDTYNe">30 days</span>
+            </div>
+            <div role="radio" class="radio-option" aria-checked="false" aria-label="Immediate" data-value="Immediate" tabindex="-1">
+              <div class="radio-circle"></div>
+              <span class="aDTYNe">Immediate</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Question 5: Why are you interested in Product Management? -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="5">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i9">
+          Why are you interested in Product Management?
+        </div>
+        <div class="oJeWuf">
+          <textarea class="KHxj8b RDeBfm" jsname="YPqjbf" name="entry.1000005" aria-labelledby="i9 i10" placeholder="Your answer"></textarea>
+        </div>
+      </div>
+
+      <!-- Question 6: Anything else you would like us to know? -->
+      <div role="listitem" class="form-card question-card Qr7Oae" jsmodel="CP1oW" data-item-id="6">
+        <div role="heading" aria-level="3" class="question-title M7eMe" id="i11">
+          Anything else you would like us to know?
+        </div>
+        <div class="oJeWuf">
+          <textarea class="KHxj8b RDeBfm" jsname="YPqjbf" name="entry.1000006" aria-labelledby="i11 i12" placeholder="Your answer"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top: 16px;">
+        <button type="submit" class="submit-btn">Submit</button>
+      </div>
+    </form>
+  </div>
+</body>
+</html>

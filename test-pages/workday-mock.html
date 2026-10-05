@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Workday Mock - Software Engineer</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 780px; margin: 40px auto; padding: 0 20px; background: #f0f3f5; color: #333; }
+    .workday-card { background: white; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    .header h2 { font-size: 22px; font-weight: 700; color: #0875e1; margin-bottom: 4px; }
+    .header span { font-size: 14px; color: #555; }
+    .section-title { font-size: 16px; font-weight: 700; margin: 24px 0 16px 0; border-bottom: 2px solid #0875e1; padding-bottom: 6px; }
+    .wd-form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #444; }
+    input[type="text"], input[type="email"], select {
+      width: 100%; padding: 8px 12px; border: 1px solid #707070; border-radius: 4px; font-size: 14px; box-sizing: border-box;
+    }
+    .wd-btn { background: #0875e1; color: white; border: none; padding: 10px 24px; border-radius: 20px; font-weight: 600; cursor: pointer; }
+    .back { display: inline-block; margin-bottom: 16px; color: #0875e1; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="workday-card" data-automation-id="workdayApplication">
+    <div class="header" data-automation-id="jobPostingHeader">
+      <h2>Software Engineer - Distributed Systems</h2>
+      <span>Adobe &bull; Bangalore, Karnataka, India</span>
+    </div>
+
+    <div class="section-title">Legal Name & Contact Information</div>
+
+    <form onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered!');">
+      <div style="display:flex; gap:16px;">
+        <div class="wd-form-group" style="flex:1;">
+          <label>First Name *</label>
+          <input type="text" data-automation-id="legalNameSection_firstName" id="wd_first_name" required>
+        </div>
+        <div class="wd-form-group" style="flex:1;">
+          <label>Last Name *</label>
+          <input type="text" data-automation-id="legalNameSection_lastName" id="wd_last_name" required>
+        </div>
+      </div>
+
+      <div class="wd-form-group">
+        <label>Email Address *</label>
+        <input type="email" data-automation-id="email" id="wd_email" required>
+      </div>
+
+      <div class="wd-form-group">
+        <label>Phone Number *</label>
+        <input type="text" data-automation-id="phone-number" id="wd_phone" required>
+      </div>
+
+      <div style="display:flex; gap:16px;">
+        <div class="wd-form-group" style="flex:1;">
+          <label>City *</label>
+          <input type="text" data-automation-id="addressSection_city" id="wd_city" required>
+        </div>
+        <div class="wd-form-group" style="flex:1;">
+          <label>Postal Code *</label>
+          <input type="text" data-automation-id="addressSection_postalCode" id="wd_pincode" required>
+        </div>
+      </div>
+
+      <div class="section-title">Candidate Questionnaire</div>
+
+      <div class="wd-form-group" data-automation-id="workAuthQuestion">
+        <label>Are you legally authorized to work in India?</label>
+        <div style="display:flex; gap:16px; margin-top:6px;">
+          <label><input type="radio" name="india_auth" value="Yes"> Yes</label>
+          <label><input type="radio" name="india_auth" value="No"> No</label>
+        </div>
+      </div>
+
+      <div class="wd-form-group">
+        <label>Will you now or in the future require sponsorship for employment visa status in India?</label>
+        <div style="display:flex; gap:16px; margin-top:6px;">
+          <label><input type="radio" name="sponsorship" value="Yes"> Yes</label>
+          <label><input type="radio" name="sponsorship" value="No"> No</label>
+        </div>
+      </div>
+
+      <button type="submit" class="wd-btn">Save and Continue</button>
+    </form>
+  </div>
+</body>
+</html>

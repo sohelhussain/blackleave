@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DeepMind - Research Engineer Application (Ambiguous Questions)</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 760px; margin: 40px auto; padding: 0 20px; background: #f8fafc; color: #1e293b; }
+    .card { background: white; padding: 36px; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .company { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+    .form-group { margin-bottom: 18px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #334155; }
+    input[type="text"], input[type="email"], input[type="tel"], textarea, select {
+      width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; box-sizing: border-box; font-family: inherit;
+    }
+    textarea { min-height: 90px; }
+    .pill { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; background: #eff6ff; color: #1d4ed8; margin-bottom: 4px; }
+    .btn { background: #0284c7; color: white; border: none; padding: 12px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; margin-top: 12px; }
+    .back { display: inline-block; margin-bottom: 16px; color: #0284c7; text-decoration: none; font-size: 13px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <a href="./index.html" class="back">&larr; Back to Test Suite</a>
+
+  <div class="card">
+    <h1>Research & Systems Software Engineer</h1>
+    <div class="company" data-company-name="Google DeepMind">Google DeepMind &bull; Advanced AI Systems &bull; Bangalore / Remote</div>
+
+    <form onsubmit="event.preventDefault(); alert('Manual Form Submission Triggered by User!');">
+      <!-- Deterministic Section -->
+      <div style="display:flex; gap:16px;">
+        <div class="form-group" style="flex:1;">
+          <label for="first_name">First Name</label>
+          <input type="text" id="first_name" name="first_name" placeholder="First Name">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="last_name">Last Name</label>
+          <input type="text" id="last_name" name="last_name" placeholder="Last Name">
+        </div>
+      </div>
+
+      <div style="display:flex; gap:16px;">
+        <div class="form-group" style="flex:1;">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" placeholder="Email Address">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="phone">Phone Number</label>
+          <input type="tel" id="phone" name="phone" placeholder="Phone Number">
+        </div>
+      </div>
+
+      <!-- Ambiguous AI Questions -->
+      <div style="margin:24px 0 12px 0; border-top:1px solid #e2e8f0; padding-top:16px;">
+        <span class="pill">✨ Gemini AI Classification & Generation Tests</span>
+      </div>
+
+      <div class="form-group">
+        <label for="why_join">Why do you want to join our company?</label>
+        <textarea id="why_join" name="why_join" placeholder="Explain your motivation to join Google DeepMind..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="project_proud">Tell us about a project you're proud of.</label>
+        <textarea id="project_proud" name="project_proud" placeholder="Select your most impactful engineering project..."></textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="challenging_problem">Describe a challenging engineering problem you solved.</label>
+        <textarea id="challenging_problem" name="challenging_problem" placeholder="Describe context, technical hurdle, and resolution..."></textarea>
+      </div>
+
+      <!-- Manual Input Required Questions -->
+      <div class="form-group">
+        <label for="salary_expectation">Salary expectation (Annual CTC in INR)</label>
+        <input type="text" id="salary_expectation" name="salary_expectation" placeholder="e.g. ₹18,00,000">
+      </div>
+
+      <div class="form-group">
+        <label for="veteran_status">Are you a veteran? (Demographic - Never inferred)</label>
+        <select id="veteran_status" name="veteran_status">
+          <option value="">-- Please Select --</option>
+          <option value="I am a veteran">I am a protected veteran</option>
+          <option value="I am not a veteran">I am not a protected veteran</option>
+          <option value="Decline to state">I do not wish to self-identify</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn">Submit Application</button>
+    </form>
+  </div>
+</body>
+</html>

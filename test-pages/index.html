@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ApplyFlow AI - Test Job Application Portal Hub</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 960px;
+      margin: 40px auto;
+      padding: 0 20px;
+      background: #f8fafc;
+      color: #0f172a;
+    }
+    h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    p.subtitle { color: #64748b; font-size: 15px; margin-bottom: 32px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .card:hover {
+      border-color: #0ea5e9;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.05);
+      transform: translateY(-2px);
+    }
+    .card h3 { font-size: 16px; font-weight: 700; margin: 0 0 6px 0; color: #0284c7; }
+    .card p { font-size: 13px; color: #64748b; margin: 0 0 14px 0; line-height: 1.5; }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #f1f5f9;
+      color: #475569;
+    }
+    .status-banner {
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+      padding: 16px 20px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>ApplyFlow AI Test Application Suite</h1>
+  <p class="subtitle">Use these mock job application pages to test field detection, deterministic autofill, React synthetic inputs, dynamic MutationObserver, and Gemini AI answers.</p>
+
+  <div class="status-banner">
+    <span style="font-size: 20px;">🛡️</span>
+    <div>
+      <strong>Zero Auto-Submit Guarantee:</strong> ApplyFlow AI will automatically or review-fill form fields, but will NEVER automatically trigger any form submit button.
+    </div>
+  </div>
+
+  <div class="grid">
+    <a href="./simple-form.html" class="card">
+      <div>
+        <h3>1. Simple Application</h3>
+        <p>Standard HTML form with common inputs: First/Last Name, Email, Phone, LinkedIn, GitHub, Portfolio.</p>
+      </div>
+      <div><span class="badge">Deterministic Matching</span></div>
+    </a>
+
+    <a href="./greenhouse-mock.html" class="card">
+      <div>
+        <h3>2. Greenhouse-Style Application</h3>
+        <p>Emulates Greenhouse ATS DOM structure (#first_name, #last_name, custom question IDs, resume input).</p>
+      </div>
+      <div><span class="badge">Greenhouse Adapter</span></div>
+    </a>
+
+    <a href="./lever-mock.html" class="card">
+      <div>
+        <h3>3. Lever-Style Application</h3>
+        <p>Emulates Lever structure with custom input names (urls[LinkedIn], urls[GitHub], additional comments).</p>
+      </div>
+      <div><span class="badge">Lever Adapter</span></div>
+    </a>
+
+    <a href="./workday-mock.html" class="card">
+      <div>
+        <h3>4. Workday-Style Application</h3>
+        <p>Uses Workday automation IDs (data-automation-id), multi-section candidate questionnaire, and radios.</p>
+      </div>
+      <div><span class="badge">Workday Adapter</span></div>
+    </a>
+
+    <a href="./react-dynamic-form.html" class="card">
+      <div>
+        <h3>5. React Dynamic Form</h3>
+        <p>React controlled component test. Tests native prototype setter, React _valueTracker, and delayed DOM fields.</p>
+      </div>
+      <div><span class="badge">React Events & MutationObserver</span></div>
+    </a>
+
+    <a href="./long-form.html" class="card">
+      <div>
+        <h3>6. Long-Form Comprehensive Application</h3>
+        <p>Complete multi-page application with Education (MCA, B.Pharma), Experience, and Projects.</p>
+      </div>
+      <div><span class="badge">Comprehensive Profile Mapping</span></div>
+    </a>
+
+    <a href="./custom-dropdowns.html" class="card">
+      <div>
+        <h3>7. Application with Custom Dropdowns</h3>
+        <p>Select controls for Degree, Notice Period, Country, and Relocation preference.</p>
+      </div>
+      <div><span class="badge">Select / Option Matching</span></div>
+    </a>
+
+    <a href="./radio-buttons.html" class="card">
+      <div>
+        <h3>8. Application with Radio Buttons</h3>
+        <p>Yes/No radio groups for Work Authorization (India, US, Europe) and Sponsorship.</p>
+      </div>
+      <div><span class="badge">Radio Group Resolution</span></div>
+    </a>
+
+    <a href="./ambiguous-questions.html" class="card">
+      <div>
+        <h3>9. Ambiguous / AI Questions Application</h3>
+        <p>Open-ended questions: "Why join us?", "Tell us about a project", "Challenging technical problem".</p>
+      </div>
+      <div><span class="badge">Gemini AI Synthesis</span></div>
+    </a>
+
+    <a href="./google-form.html" class="card">
+      <div>
+        <h3>10. Google Forms Job Application</h3>
+        <p>Emulates real Google Forms DOM (.Qr7Oae, .M7eMe, ARIA radiogroup, role="heading", whsOnd, KHxj8b).</p>
+      </div>
+      <div><span class="badge">Google Forms Adapter & ARIA</span></div>
+    </a>
+  </div>
+</body>
+</html>
