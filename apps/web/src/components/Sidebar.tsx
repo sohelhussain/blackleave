@@ -30,8 +30,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0 select-none">
       {/* Brand Header */}
       <div className="p-5 border-b border-slate-800 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center text-white font-black text-lg shadow-sm">
-          B
+        <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/80 p-1 flex items-center justify-center shadow-inner shrink-0">
+          <img src="/logo-white.png" alt="blackLeave logo" className="w-full h-full object-contain" />
         </div>
         <div>
           <h1 className="text-white font-bold text-base leading-tight tracking-tight">blackLeave</h1>

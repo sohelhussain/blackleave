@@ -118,7 +118,9 @@ function renderDrawer(fields: DetectedField[]) {
       <!-- Header -->
       <div style="padding:16px 20px; background:#0f172a; color:#ffffff; display:flex; align-items:center; justify-content:space-between;">
         <div style="display:flex; align-items:center; gap:8px;">
-          <div style="width:10px; height:10px; border-radius:50%; background:#10b981;"></div>
+          <div style="width:22px; height:22px; border-radius:5px; background:#1e293b; border:1px solid #334155; display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;">
+            <img src="${chrome.runtime.getURL('icons/logo-white.png')}" alt="blackLeave logo" style="width:16px; height:16px; object-fit:contain;" />
+          </div>
           <span style="font-weight:700; font-size:16px; letter-spacing:-0.3px;">blackLeave</span>
           <span style="font-size:11px; background:#334155; padding:2px 6px; border-radius:4px;">Review Mode</span>
         </div>
