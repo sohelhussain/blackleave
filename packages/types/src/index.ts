@@ -32,15 +32,38 @@ export interface PersonalInfo {
   state: string;
   country: string;
   pincode: string;
+  address?: string;
+  postalCode?: string;
   linkedin: string;
   github: string;
   portfolio: string;
   summary?: string;
+  // Optional sensitive fields - never inferred, not required for 100% completion
+  age?: number | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  genderCustom?: string | null;
+}
+
+export interface StudentEnrollment {
+  isCurrentlyEnrolled: boolean;
+  institution: string;
+  degreeProgram: string;
+  fieldOfStudy: string;
+  currentYearSemester: string;
+  expectedGraduationDate: string;
+  openToStudyCombinedJobs: boolean;
 }
 
 export interface JobPreferences {
   targetRoles: string[];
+  targetJobTitles?: string[];
+  targetIndustries?: string[];
+  targetCareerAreas?: string[];
+  employmentStatus?: string;
+  studentEnrollment?: StudentEnrollment | null;
   employmentTypes: string[];
+  workModes?: string[];
   preferredLocations: string[];
   willingToRelocate: boolean;
   willingToWorkRemotely: boolean;
@@ -70,7 +93,15 @@ export interface SchoolRecord {
   twelfthStream: string;
 }
 
+export interface CountryWorkAuthorization {
+  countryCode: string;
+  countryName: string;
+  status: 'AUTHORIZED' | 'REQUIRES_SPONSORSHIP' | 'NOT_AUTHORIZED' | 'UNSURE';
+  visaType?: string | null;
+}
+
 export interface WorkAuthorization {
+  // Legacy fields for backward compatibility
   indiaAuthorized: boolean;
   indiaSponsorshipRequired: boolean;
   usAuthorized: boolean;
@@ -78,6 +109,8 @@ export interface WorkAuthorization {
   europeAuthorized: boolean;
   europeSponsorshipRequired: boolean;
   otherDetails?: string | null;
+  // Global country work authorizations
+  countries?: CountryWorkAuthorization[];
 }
 
 export interface ExperienceRecord {
@@ -130,6 +163,26 @@ export interface ResumeRecord {
   updatedAt: string;
 }
 
+export interface ProfileApplicationQuestion {
+  id: string;
+  category: string;
+  question: string;
+  answer: string;
+  notes?: string;
+  lastUpdated?: string;
+}
+
+export interface CoverLetterRecord {
+  id: string;
+  title: string;
+  content: string;
+  isDefault: boolean;
+  targetRole?: string | null;
+  targetCompany?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface UserProfile {
   id: string;
   personal: PersonalInfo;
@@ -141,6 +194,8 @@ export interface UserProfile {
   projects: ProjectRecord[];
   skills: SkillsInventory;
   resumes: ResumeRecord[];
+  applicationQuestions?: ProfileApplicationQuestion[];
+  coverLetters?: CoverLetterRecord[];
   createdAt?: string;
   updatedAt?: string;
 }
@@ -251,4 +306,112 @@ export interface ApplicationSession {
   createdAt: number;
 }
 
+export interface ProfileCompleteness {
+  score: number;
+  missingItems: Array<{
+    category: string;
+    label: string;
+    tab: string;
+  }>;
+}
+
+export function calculateProfileCompleteness(profile?: Partial<UserProfile> | null): ProfileCompleteness {
+  if (!profile) {
+    return {
+      score: 0,
+      missingItems: [{ category: 'Personal', label: 'Add basic personal information', tab: 'personal' }]
+    };
+  }
+
+  const items: Array<{ category: string; label: string; tab: string; completed: boolean; weight: number }> = [
+    {
+      category: 'Personal',
+      label: 'Add full name and contact information',
+      tab: 'personal',
+      completed: Boolean(profile.personal?.fullName && profile.personal?.email && profile.personal?.phone),
+      weight: 15
+    },
+    {
+      category: 'Location',
+      label: 'Add current city and country',
+      tab: 'personal',
+      completed: Boolean(profile.personal?.city && profile.personal?.country),
+      weight: 10
+    },
+    {
+      category: 'Preferences',
+      label: 'Select target industries and job titles',
+      tab: 'preferences',
+      completed: Boolean(
+        (profile.jobPreferences?.targetIndustries && profile.jobPreferences.targetIndustries.length > 0) ||
+        (profile.jobPreferences?.targetRoles && profile.jobPreferences.targetRoles.length > 0) ||
+        (profile.jobPreferences?.targetJobTitles && profile.jobPreferences.targetJobTitles.length > 0)
+      ),
+      weight: 15
+    },
+    {
+      category: 'Preferences',
+      label: 'Choose preferred employment types and work mode',
+      tab: 'preferences',
+      completed: Boolean(profile.jobPreferences?.employmentTypes && profile.jobPreferences.employmentTypes.length > 0),
+      weight: 10
+    },
+    {
+      category: 'Work Authorization',
+      label: 'Configure work authorization for target countries',
+      tab: 'workAuth',
+      completed: Boolean(
+        (profile.workAuthorization?.countries && profile.workAuthorization.countries.length > 0) ||
+        profile.workAuthorization?.indiaAuthorized ||
+        profile.workAuthorization?.usAuthorized ||
+        profile.workAuthorization?.europeAuthorized
+      ),
+      weight: 15
+    },
+    {
+      category: 'Education',
+      label: 'Add at least one degree or education entry',
+      tab: 'education',
+      completed: Boolean(profile.education && profile.education.length > 0),
+      weight: 15
+    },
+    {
+      category: 'Experience & Projects',
+      label: 'Add work experience or projects',
+      tab: 'experience',
+      completed: Boolean(
+        (profile.experience && profile.experience.length > 0) || (profile.projects && profile.projects.length > 0)
+      ),
+      weight: 10
+    },
+    {
+      category: 'Application Questions',
+      label: 'Answer common application questions (motivation, availability)',
+      tab: 'questions',
+      completed: Boolean(profile.applicationQuestions && profile.applicationQuestions.length >= 2),
+      weight: 10
+    }
+  ];
+
+  let score = 0;
+  const missingItems: Array<{ category: string; label: string; tab: string }> = [];
+
+  for (const item of items) {
+    if (item.completed) {
+      score += item.weight;
+    } else {
+      missingItems.push({ category: item.category, label: item.label, tab: item.tab });
+    }
+  }
+
+  return {
+    score: Math.min(100, Math.round(score)),
+    missingItems
+  };
+}
+
+export * from './countries.js';
+export * from './industries.js';
+export * from './application-questions.js';
 export * from './initial-profile.js';
+

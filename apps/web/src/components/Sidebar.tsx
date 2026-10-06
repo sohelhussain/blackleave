@@ -14,9 +14,16 @@ export type TabType = 'dashboard' | 'profile' | 'resumes' | 'history' | 'ai' | '
 interface SidebarProps {
   currentTab: TabType;
   onSelectTab: (tab: TabType) => void;
+  userName?: string;
+  userEmail?: string;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentTab,
+  onSelectTab,
+  userName = 'Sohel Hussain',
+  userEmail = 'sohelhussaing@gmail.com'
+}) => {
   const navItems: Array<{ id: TabType; label: string; icon: React.ReactNode }> = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'profile', label: 'Candidate Profile', icon: <User className="w-4 h-4" /> },
@@ -25,6 +32,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
     { id: 'ai', label: 'AI Settings', icon: <Bot className="w-4 h-4" /> },
     { id: 'privacy', label: 'Security & Privacy', icon: <ShieldCheck className="w-4 h-4" /> }
   ];
+
+  const initials = userName
+    ? userName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'BL';
 
   return (
     <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0 select-none">
@@ -42,14 +53,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, onSelectTab }) => 
       {/* User Quick Info */}
       <div className="p-4 mx-3 my-3 bg-slate-800/60 rounded-xl border border-slate-700/60 flex items-center gap-3">
         <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-sm">
-          SH
+          {initials}
         </div>
         <div className="overflow-hidden">
           <div className="text-sm font-semibold text-white truncate flex items-center gap-1">
-            Sohel Hussain
+            {userName}
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline" />
           </div>
-          <div className="text-[11px] text-slate-400 truncate">sohelhussaing@gmail.com</div>
+          <div className="text-[11px] text-slate-400 truncate">{userEmail}</div>
         </div>
       </div>
 

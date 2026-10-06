@@ -25,7 +25,26 @@ export const INITIAL_SOHEL_PROFILE: UserProfile = {
       'Backend Engineer',
       'Full Stack Developer'
     ],
+    targetJobTitles: [
+      'Software Engineer',
+      'SDE Intern',
+      'Backend Engineer',
+      'Full Stack Developer'
+    ],
+    targetIndustries: ['Technology', 'Healthcare & Pharmaceuticals'],
+    targetCareerAreas: ['Software Engineering', 'Full Stack Development', 'Distributed Systems'],
+    employmentStatus: 'Student',
+    studentEnrollment: {
+      isCurrentlyEnrolled: true,
+      institution: 'Jain University',
+      degreeProgram: 'Master of Computer Applications',
+      fieldOfStudy: 'Computer Science',
+      currentYearSemester: '2nd Year / 3rd Semester',
+      expectedGraduationDate: '2027',
+      openToStudyCombinedJobs: true
+    },
     employmentTypes: ['Internship', 'Full-time'],
+    workModes: ['Remote', 'Hybrid'],
     preferredLocations: ['Bangalore', 'Chennai', 'Hyderabad', 'Europe', 'Remote'],
     willingToRelocate: true,
     willingToWorkRemotely: true,
@@ -74,7 +93,27 @@ export const INITIAL_SOHEL_PROFILE: UserProfile = {
     usSponsorshipRequired: true,
     europeAuthorized: true,
     europeSponsorshipRequired: true,
-    otherDetails: null
+    otherDetails: null,
+    countries: [
+      {
+        countryCode: 'IN',
+        countryName: 'India',
+        status: 'AUTHORIZED',
+        visaType: 'Citizen'
+      },
+      {
+        countryCode: 'US',
+        countryName: 'United States',
+        status: 'REQUIRES_SPONSORSHIP',
+        visaType: null
+      },
+      {
+        countryCode: 'DE',
+        countryName: 'Germany',
+        status: 'REQUIRES_SPONSORSHIP',
+        visaType: null
+      }
+    ]
   },
   experience: [
     {
@@ -358,6 +397,47 @@ export const INITIAL_SOHEL_PROFILE: UserProfile = {
       isDefault: false,
       createdAt: '2025-02-10T00:00:00.000Z',
       updatedAt: '2025-06-01T00:00:00.000Z'
+    }
+  ],
+  applicationQuestions: [
+    {
+      id: 'q_sohel_why_role',
+      category: 'MOTIVATION',
+      question: 'Why are you interested in this role?',
+      answer:
+        'I am excited about this role because it allows me to build high-scale, resilient distributed systems and full-stack web applications. My experience leading backend architectures and browser automations aligns directly with delivering high-impact product features.',
+      lastUpdated: '2025-06-15T00:00:00.000Z'
+    },
+    {
+      id: 'q_sohel_why_company',
+      category: 'MOTIVATION',
+      question: 'Why are you interested in this company?',
+      answer:
+        'I strongly admire your mission to build developer-first, high-reliability products. The opportunity to work on ambitious technical challenges with a collaborative, high-velocity engineering culture is exactly where I can contribute my best work.',
+      lastUpdated: '2025-06-15T00:00:00.000Z'
+    },
+    {
+      id: 'q_sohel_notice_period',
+      category: 'AVAILABILITY',
+      question: 'What is your notice period / earliest start date?',
+      answer: '15 days notice period. Available to join within 15 days upon offer acceptance.',
+      lastUpdated: '2025-06-15T00:00:00.000Z'
+    },
+    {
+      id: 'q_sohel_tell_about_yourself',
+      category: 'EXPERIENCE',
+      question: 'Tell us about yourself.',
+      answer:
+        'I am a software engineer with a strong foundation in computer science and pharmacy. I have hands-on experience building full-stack applications with React, Next.js, TypeScript, Node.js, and PostgreSQL, along with network inspection engines and AI-assisted workflows.',
+      lastUpdated: '2025-06-15T00:00:00.000Z'
+    },
+    {
+      id: 'q_sohel_anything_else',
+      category: 'ADDITIONAL_INFO',
+      question: 'Anything else you would like us to know?',
+      answer:
+        'I am an eager continuous learner currently pursuing my MCA at Jain University while shipping production-grade open source projects and web tools. I look forward to contributing immediately to the team.',
+      lastUpdated: '2025-06-15T00:00:00.000Z'
     }
   ],
   createdAt: '2025-01-01T00:00:00.000Z',

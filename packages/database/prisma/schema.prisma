@@ -11,6 +11,8 @@ model User {
   id           String        @id @default(uuid())
   email        String        @unique
   passwordHash String?
+  googleId     String?       @unique
+  avatarUrl    String?
   profile      Profile?
   applications Application[]
   createdAt    DateTime      @default(now())
@@ -18,35 +20,50 @@ model User {
 }
 
 model Profile {
-  id                String             @id @default(uuid())
-  userId            String             @unique
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fullName          String
-  firstName         String
-  lastName          String
-  preferredName     String?
-  email             String
-  phone             String
-  city              String
-  state             String
-  country           String
-  pincode           String
-  linkedin          String?
-  github            String?
-  portfolio         String?
-  summary           String?
-  tenthPercentage   String?
-  twelfthPercentage String?
-  twelfthStream     String?
-  jobPreference     JobPreference?
-  workAuthorization WorkAuthorization?
-  education         Education[]
-  experience        Experience[]
-  projects          Project[]
-  skills            Skill[]
-  resumes           Resume[]
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
+  id                    String                   @id @default(uuid())
+  userId                String                   @unique
+  user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName              String
+  firstName             String
+  lastName              String
+  preferredName         String?
+  email                 String
+  phone                 String
+  city                  String
+  state                 String
+  country               String
+  pincode               String
+  address               String?
+  postalCode            String?
+  age                   Int?
+  dateOfBirth           String?
+  gender                String?
+  genderCustom          String?
+  linkedin              String?
+  github                String?
+  portfolio             String?
+  summary               String?
+  tenthPercentage       String?
+  twelfthPercentage     String?
+  twelfthStream         String?
+  employmentStatus      String?
+  isStudent             Boolean                  @default(false)
+  studentEnrollment     StudentEnrollment?
+  targetIndustries      String[]                 @default([])
+  targetJobTitles       String[]                 @default([])
+  targetCareerAreas     String[]                 @default([])
+  jobPreference         JobPreference?
+  workAuthorization     WorkAuthorization?
+  countryAuthorizations CountryAuthorization[]
+  applicationQuestions  ProfileQuestionAnswer[]
+  coverLetters          CoverLetter[]
+  education             Education[]
+  experience            Experience[]
+  projects              Project[]
+  skills                Skill[]
+  resumes               Resume[]
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 }
 
 model JobPreference {
@@ -79,6 +96,60 @@ model WorkAuthorization {
   otherDetails              String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
+}
+
+model StudentEnrollment {
+  id                      String   @id @default(uuid())
+  profileId               String   @unique
+  profile                 Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  isCurrentlyEnrolled     Boolean  @default(true)
+  institution             String
+  degreeProgram           String
+  fieldOfStudy            String
+  currentYearSemester     String
+  expectedGraduationDate  String
+  openToStudyCombinedJobs Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model CountryAuthorization {
+  id          String   @id @default(uuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  countryCode String
+  countryName String
+  status      String   // AUTHORIZED, REQUIRES_SPONSORSHIP, NOT_AUTHORIZED, UNSURE
+  visaType    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([profileId, countryCode])
+}
+
+model ProfileQuestionAnswer {
+  id        String   @id @default(uuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  category  String   // MOTIVATION, CAREER, AVAILABILITY, etc.
+  question  String
+  answer    String
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CoverLetter {
+  id             String   @id @default(uuid())
+  profileId      String
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title          String
+  content        String
+  isDefault      Boolean  @default(false)
+  targetRole     String?
+  targetCompany  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Education {

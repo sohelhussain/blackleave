@@ -336,6 +336,23 @@ const DETERMINISTIC_RULES: MappingRule[] = [
       return field.fieldType === 'checkbox' ? bool : bool ? 'Yes' : 'No';
     },
     confidence: 0.98
+  },
+  // Student Status
+  {
+    patterns: [
+      /\b(?:are\s*you\s*(?:currently\s*)?(?:a\s*)?student|are\s*you\s*(?:currently\s*)?(?:enrolled\s*as\s*a\s*)?student|current\s*student\s*status)\b/i,
+      /\bcurrently\s*enrolled\s*(?:in|as\s*a\s*student)\b/i
+    ],
+    profileField: 'studentEnrollment.isCurrentlyEnrolled',
+    category: 'EDUCATION',
+    getValue: (p, field) => {
+      const bool = Boolean(
+        p.jobPreferences?.studentEnrollment?.isCurrentlyEnrolled ??
+        p.jobPreferences?.employmentStatus === 'STUDENT'
+      );
+      return field.fieldType === 'checkbox' ? bool : bool ? 'Yes' : 'No';
+    },
+    confidence: 0.95
   }
 ];
 
@@ -345,6 +362,44 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
   const htmlId = (field.htmlId || '').trim();
   const placeholder = (field.placeholder || '').trim();
   const ariaLabel = (field.ariaLabel || '').trim();
+
+  // Check for open-ended or ambiguous questions that require Gemini AI
+  const combinedContext = `${label} ${placeholder} ${field.surroundingText || ''}`.toLowerCase();
+
+  // Dynamic country work authorization check from profile.workAuthorization.countries (for specific non-US countries)
+  if (profile.workAuthorization?.countries?.length) {
+    const isAuthQ = /\b(?:authorized|eligible|legally\s*authorized|work\s*permit|work\s*authorization)\b/i.test(combinedContext);
+    const isSponsorshipQ = /\b(?:require|need).*?(?:visa\s*sponsorship|sponsorship)\b/i.test(combinedContext);
+
+    if (isAuthQ || isSponsorshipQ) {
+      for (const auth of profile.workAuthorization.countries) {
+        if (auth.countryCode === 'US') continue;
+        const countryRegex = new RegExp(`\\b${auth.countryName}\\b`, 'i');
+        if (countryRegex.test(combinedContext)) {
+          let val: string | boolean | null = null;
+          if (isSponsorshipQ) {
+            const needsSponsorship = auth.status === 'REQUIRES_SPONSORSHIP';
+            val = field.fieldType === 'checkbox' ? needsSponsorship : needsSponsorship ? 'Yes' : 'No';
+          } else {
+            const isAuth = auth.status === 'AUTHORIZED';
+            val = field.fieldType === 'checkbox' ? isAuth : isAuth ? 'Yes' : 'No';
+          }
+          return {
+            ...field,
+            suggestedProfileField: `workAuthorization.countries.${auth.countryCode}`,
+            category: isSponsorshipQ ? 'SPONSORSHIP' : 'WORK_AUTHORIZATION',
+            confidence: 0.95,
+            confidenceLevel: 'HIGH',
+            source: 'deterministic',
+            suggestedValue: val,
+            userValue: val,
+            requiresConfirmation: false,
+            explanation: `Matched verified work authorization for ${auth.countryName} (${auth.status})`
+          };
+        }
+      }
+    }
+  }
 
   // Try matching with each text source in priority order
   const searchTexts = [
@@ -376,9 +431,6 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
       }
     }
   }
-
-  // Check for open-ended or ambiguous questions that require Gemini AI
-  const combinedContext = `${label} ${placeholder} ${field.surroundingText || ''}`.toLowerCase();
 
   // Explicit check for generic open-ended fields that should NOT be answered by AI
   if (

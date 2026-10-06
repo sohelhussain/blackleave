@@ -9,6 +9,9 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
+  "dependencies": {
+    "@applyflow/types": "workspace:*"
+  },
   "peerDependencies": {
     "react": ">=18.0.0"
   },

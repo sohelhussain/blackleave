@@ -1,5 +1,6 @@
 import React from 'react';
-import { UserProfile, ApplicationRecord } from '@applyflow/types';
+import { UserProfile, ApplicationRecord, calculateProfileCompleteness } from '@applyflow/types';
+import { ProgressBar } from '@applyflow/ui';
 import {
   FileText,
   Sparkles,
@@ -21,6 +22,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   applications,
   onNavigate
 }) => {
+  const completeness = calculateProfileCompleteness(profile);
   const totalAssisted = applications.length;
   const totalFieldsFilled = applications.reduce((sum, a) => sum + (a.fieldsFilled || 0), 0);
   const totalAiAnswers = applications.reduce((sum, a) => sum + (a.aiAnswersCount || 0), 0);
@@ -53,6 +55,46 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Profile Completion Card */}
+      {completeness.score < 100 && (
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex-1 space-y-2.5">
+            <div className="flex items-center gap-3">
+              <span className="font-bold text-slate-900 text-sm">Profile completion</span>
+              <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200">
+                {completeness.score}%
+              </span>
+            </div>
+            <ProgressBar percentage={completeness.score} showPercentage={false} />
+            <p className="text-slate-500 text-xs">
+              Complete your profile to improve job matching and application autofill.
+            </p>
+            {completeness.missingItems.length > 0 && (
+              <div className="pt-1 flex flex-wrap gap-2 text-xs">
+                {completeness.missingItems.map((item, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => onNavigate('profile')}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-slate-700 hover:bg-sky-50 hover:text-sky-700 transition-colors"
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={() => onNavigate('profile')}
+            className="px-6 py-3 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl text-xs shadow-sm flex items-center gap-2 shrink-0 transition-all"
+          >
+            <span>Complete Profile</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

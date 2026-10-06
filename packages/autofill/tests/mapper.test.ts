@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { mapFieldToProfile } from '../dist/mapper.js';
-import { INITIAL_SOHEL_PROFILE } from '@applyflow/types';
+import { INITIAL_SOHEL_PROFILE, calculateProfileCompleteness } from '@applyflow/types';
 import type { DetectedField } from '@applyflow/types';
 
 test('Deterministic Mapping - First Name with High Confidence', () => {
@@ -115,3 +115,80 @@ test('Demographic Field - Never inferred, marked LOW confidence for manual entry
   assert.strictEqual(mapped.category, 'DEMOGRAPHIC');
   assert.strictEqual(mapped.source, 'manual');
 });
+
+test('Deterministic Mapping - Student enrollment status', () => {
+  const dummyField: DetectedField = {
+    id: 'f6',
+    selector: 'input#student',
+    detectedLabel: 'Are you currently a student?',
+    fieldType: 'radio',
+    isRequired: false,
+    suggestedProfileField: null,
+    category: 'UNKNOWN',
+    confidence: 0,
+    confidenceLevel: 'LOW',
+    source: 'unmapped',
+    suggestedValue: null,
+    requiresConfirmation: false
+  };
+
+  const mapped = mapFieldToProfile(dummyField, INITIAL_SOHEL_PROFILE);
+  assert.strictEqual(mapped.suggestedValue, 'Yes');
+  assert.strictEqual(mapped.confidenceLevel, 'HIGH');
+  assert.strictEqual(mapped.category, 'EDUCATION');
+});
+
+test('Dynamic Mapping - Country work authorization for Germany sponsorship', () => {
+  const dummyField: DetectedField = {
+    id: 'f7',
+    selector: 'input#de_sponsorship',
+    detectedLabel: 'Will you require visa sponsorship in Germany?',
+    fieldType: 'radio',
+    isRequired: true,
+    suggestedProfileField: null,
+    category: 'UNKNOWN',
+    confidence: 0,
+    confidenceLevel: 'LOW',
+    source: 'unmapped',
+    suggestedValue: null,
+    requiresConfirmation: false
+  };
+
+  const mapped = mapFieldToProfile(dummyField, INITIAL_SOHEL_PROFILE);
+  assert.strictEqual(mapped.suggestedValue, 'Yes');
+  assert.strictEqual(mapped.confidenceLevel, 'HIGH');
+  assert.strictEqual(mapped.category, 'SPONSORSHIP');
+  assert.strictEqual(mapped.suggestedProfileField, 'workAuthorization.countries.DE');
+});
+
+test('Profile Completeness - Evaluates score and exempts sensitive fields', () => {
+  const result = calculateProfileCompleteness(INITIAL_SOHEL_PROFILE);
+  assert.strictEqual(result.score, 100);
+  assert.strictEqual(result.missingItems.length, 0);
+
+  // Sensitive fields omitted should still allow 100% completion
+  const profileWithoutDemographics = {
+    ...INITIAL_SOHEL_PROFILE,
+    personal: {
+      ...INITIAL_SOHEL_PROFILE.personal,
+      gender: null,
+      age: null,
+      dateOfBirth: null
+    }
+  };
+  const resultWithoutDemographics = calculateProfileCompleteness(profileWithoutDemographics);
+  assert.strictEqual(resultWithoutDemographics.score, 100);
+
+  // Missing application questions & education lowers score with actionable missing items
+  const incompleteProfile = {
+    ...INITIAL_SOHEL_PROFILE,
+    applicationQuestions: [],
+    education: []
+  };
+  const incompleteResult = calculateProfileCompleteness(incompleteProfile);
+  assert.ok(incompleteResult.score < 100);
+  assert.ok(incompleteResult.missingItems.some((item) => item.tab === 'questions'));
+  assert.ok(incompleteResult.missingItems.some((item) => item.tab === 'education'));
+});
+
+

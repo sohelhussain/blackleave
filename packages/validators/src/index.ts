@@ -11,15 +11,38 @@ export const PersonalInfoSchema = z.object({
   state: z.string().min(1, 'State is required'),
   country: z.string().min(1, 'Country is required'),
   pincode: z.string().min(1, 'Pincode is required'),
+  address: z.string().optional(),
+  postalCode: z.string().optional(),
   linkedin: z.string().url('Invalid LinkedIn URL').or(z.literal('')),
   github: z.string().url('Invalid GitHub URL').or(z.literal('')),
   portfolio: z.string().url('Invalid Portfolio URL').or(z.literal('')),
-  summary: z.string().optional()
+  summary: z.string().optional(),
+  // Sensitive optional fields
+  age: z.number().nullable().optional(),
+  dateOfBirth: z.string().nullable().optional(),
+  gender: z.string().nullable().optional(),
+  genderCustom: z.string().nullable().optional()
+});
+
+export const StudentEnrollmentSchema = z.object({
+  isCurrentlyEnrolled: z.boolean().default(true),
+  institution: z.string().default(''),
+  degreeProgram: z.string().default(''),
+  fieldOfStudy: z.string().default(''),
+  currentYearSemester: z.string().default(''),
+  expectedGraduationDate: z.string().default(''),
+  openToStudyCombinedJobs: z.boolean().default(true)
 });
 
 export const JobPreferencesSchema = z.object({
   targetRoles: z.array(z.string()),
+  targetJobTitles: z.array(z.string()).optional(),
+  targetIndustries: z.array(z.string()).optional(),
+  targetCareerAreas: z.array(z.string()).optional(),
+  employmentStatus: z.string().optional(),
+  studentEnrollment: StudentEnrollmentSchema.nullable().optional(),
   employmentTypes: z.array(z.string()),
+  workModes: z.array(z.string()).optional(),
   preferredLocations: z.array(z.string()),
   willingToRelocate: z.boolean(),
   willingToWorkRemotely: z.boolean(),
@@ -49,6 +72,13 @@ export const SchoolRecordSchema = z.object({
   twelfthStream: z.string()
 });
 
+export const CountryWorkAuthorizationSchema = z.object({
+  countryCode: z.string(),
+  countryName: z.string(),
+  status: z.enum(['AUTHORIZED', 'REQUIRES_SPONSORSHIP', 'NOT_AUTHORIZED', 'UNSURE']),
+  visaType: z.string().nullable().optional()
+});
+
 export const WorkAuthorizationSchema = z.object({
   indiaAuthorized: z.boolean(),
   indiaSponsorshipRequired: z.boolean(),
@@ -56,7 +86,8 @@ export const WorkAuthorizationSchema = z.object({
   usSponsorshipRequired: z.boolean(),
   europeAuthorized: z.boolean(),
   europeSponsorshipRequired: z.boolean(),
-  otherDetails: z.string().nullable().optional()
+  otherDetails: z.string().nullable().optional(),
+  countries: z.array(CountryWorkAuthorizationSchema).optional()
 });
 
 export const ExperienceRecordSchema = z.object({
@@ -109,6 +140,26 @@ export const ResumeRecordSchema = z.object({
   updatedAt: z.string()
 });
 
+export const ProfileApplicationQuestionSchema = z.object({
+  id: z.string(),
+  category: z.string(),
+  question: z.string().min(1),
+  answer: z.string(),
+  notes: z.string().optional(),
+  lastUpdated: z.string().optional()
+});
+
+export const CoverLetterSchema = z.object({
+  id: z.string(),
+  title: z.string().min(1),
+  content: z.string(),
+  isDefault: z.boolean().default(false),
+  targetRole: z.string().nullable().optional(),
+  targetCompany: z.string().nullable().optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional()
+});
+
 export const UserProfileSchema = z.object({
   id: z.string(),
   personal: PersonalInfoSchema,
@@ -120,6 +171,8 @@ export const UserProfileSchema = z.object({
   projects: z.array(ProjectRecordSchema),
   skills: SkillsInventorySchema,
   resumes: z.array(ResumeRecordSchema),
+  applicationQuestions: z.array(ProfileApplicationQuestionSchema).optional(),
+  coverLetters: z.array(CoverLetterSchema).optional(),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional()
 });

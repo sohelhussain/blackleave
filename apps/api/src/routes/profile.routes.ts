@@ -13,18 +13,44 @@ export function getCurrentProfile(): UserProfile {
   return currentProfile;
 }
 
+import { calculateProfileCompleteness } from '@applyflow/types';
+
 export function setCurrentProfile(newProfile: UserProfile): void {
   currentProfile = newProfile;
 }
 
 profileRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  return sendSuccess(res, { profile: currentProfile });
+  const completion = calculateProfileCompleteness(currentProfile);
+  return sendSuccess(res, { profile: currentProfile, completion });
 });
 
 profileRouter.put('/', (req: AuthenticatedRequest, res: Response) => {
   const parsed = UserProfileSchema.partial().safeParse(req.body);
   if (!parsed.success) {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
+  }
+
+  // Synchronize country work authorization into legacy flags if present
+  const incomingAuth = parsed.data.workAuthorization;
+  let syncedAuth = incomingAuth ? { ...currentProfile.workAuthorization, ...incomingAuth } : currentProfile.workAuthorization;
+
+  if (incomingAuth?.countries && incomingAuth.countries.length > 0) {
+    const inAuth = incomingAuth.countries.find((c) => c.countryCode === 'IN');
+    const usAuth = incomingAuth.countries.find((c) => c.countryCode === 'US');
+    const euAuth = incomingAuth.countries.find((c) => ['DE', 'FR', 'IE', 'NL'].includes(c.countryCode));
+
+    if (inAuth) {
+      syncedAuth.indiaAuthorized = inAuth.status === 'AUTHORIZED' || inAuth.status === 'REQUIRES_SPONSORSHIP';
+      syncedAuth.indiaSponsorshipRequired = inAuth.status === 'REQUIRES_SPONSORSHIP';
+    }
+    if (usAuth) {
+      syncedAuth.usAuthorized = usAuth.status === 'AUTHORIZED' || usAuth.status === 'REQUIRES_SPONSORSHIP';
+      syncedAuth.usSponsorshipRequired = usAuth.status === 'REQUIRES_SPONSORSHIP';
+    }
+    if (euAuth) {
+      syncedAuth.europeAuthorized = euAuth.status === 'AUTHORIZED' || euAuth.status === 'REQUIRES_SPONSORSHIP';
+      syncedAuth.europeSponsorshipRequired = euAuth.status === 'REQUIRES_SPONSORSHIP';
+    }
   }
 
   currentProfile = {
@@ -38,14 +64,13 @@ profileRouter.put('/', (req: AuthenticatedRequest, res: Response) => {
       ...currentProfile.jobPreferences,
       ...(parsed.data.jobPreferences || {})
     },
-    workAuthorization: {
-      ...currentProfile.workAuthorization,
-      ...(parsed.data.workAuthorization || {})
-    },
+    workAuthorization: syncedAuth,
+    applicationQuestions: parsed.data.applicationQuestions !== undefined ? parsed.data.applicationQuestions : currentProfile.applicationQuestions,
     updatedAt: new Date().toISOString()
   };
 
-  return sendSuccess(res, { profile: currentProfile, message: 'Profile updated successfully' });
+  const completion = calculateProfileCompleteness(currentProfile);
+  return sendSuccess(res, { profile: currentProfile, completion, message: 'Profile updated successfully' });
 });
 
 profileRouter.delete('/', (req: AuthenticatedRequest, res: Response) => {
