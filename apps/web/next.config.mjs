@@ -10,18 +10,7 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui', '@applyflow/database'],
   experimental: {
-    serverComponentsExternalPackages: ['@prisma/client'],
     outputFileTracingRoot: monorepoRoot,
-    outputFileTracingIncludes: {
-      '/api/**/*': [
-        '../../node_modules/.prisma/client/**/*',
-        '../../node_modules/@prisma/client/**/*',
-        './node_modules/.prisma/client/**/*',
-        './node_modules/@prisma/client/**/*',
-        '../../packages/database/node_modules/.prisma/client/**/*',
-        '../../packages/database/prisma/**/*'
-      ]
-    }
   },
   async rewrites() {
     const rawApiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
