@@ -1,18 +1,20 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { getCurrentProfile, setCurrentProfile } from './profile.routes.js';
+import { getProfileForUser, saveProfileForUser } from '../services/profile.service.js';
 import { EducationRecordSchema } from '@applyflow/validators';
 import { EducationRecord } from '@applyflow/types';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 export const educationRouter = Router();
 
-educationRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const profile = getCurrentProfile();
+educationRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
   return sendSuccess(res, { education: profile.education });
 });
 
-educationRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
+educationRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const parsed = EducationRecordSchema.safeParse({
     ...req.body,
     id: req.body.id || `edu_${Date.now()}`
@@ -22,16 +24,17 @@ educationRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  const profile = getCurrentProfile();
-  profile.education.push(parsed.data as EducationRecord);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedEducation = [...profile.education, parsed.data as EducationRecord];
+  await saveProfileForUser(userId, { education: updatedEducation });
 
   return sendSuccess(res, { education: parsed.data }, 201);
 });
 
-educationRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
+educationRouter.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
+  const profile = req.profile || await getProfileForUser(userId);
   const index = profile.education.findIndex((e) => e.id === id);
 
   if (index === -1) {
@@ -43,20 +46,22 @@ educationRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  profile.education[index] = {
-    ...profile.education[index],
+  const updatedEducation = [...profile.education];
+  updatedEducation[index] = {
+    ...updatedEducation[index],
     ...parsed.data
   };
-  setCurrentProfile(profile);
 
-  return sendSuccess(res, { education: profile.education[index] });
+  await saveProfileForUser(userId, { education: updatedEducation });
+  return sendSuccess(res, { education: updatedEducation[index] });
 });
 
-educationRouter.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
+educationRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
-  profile.education = profile.education.filter((e) => e.id !== id);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedEducation = profile.education.filter((e) => e.id !== id);
 
-  return sendSuccess(res, { message: 'Education deleted successfully' });
+  await saveProfileForUser(userId, { education: updatedEducation });
+  return sendSuccess(res, { message: 'Education record deleted successfully' });
 });

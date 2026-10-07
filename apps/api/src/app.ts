@@ -12,16 +12,22 @@ import { resumesRouter } from './routes/resumes.routes.js';
 import { applicationsRouter } from './routes/applications.routes.js';
 import { aiRouter } from './routes/ai.routes.js';
 
+import { parseCookies } from './utils/session.js';
+
 export function createApp() {
   const app = express();
 
   // Middleware
   app.use(cors({ origin: true, credentials: true }));
   app.use(express.json({ limit: '10mb' }));
+  app.use((req, _res, next) => {
+    (req as any).cookies = parseCookies(req);
+    next();
+  });
 
   // Health check endpoint
   app.get('/health', (req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), app: 'ApplyFlow AI API' });
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), app: 'blackLeave API' });
   });
 
   // Public auth routes

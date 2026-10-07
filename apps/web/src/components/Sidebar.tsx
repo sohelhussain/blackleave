@@ -6,7 +6,8 @@ import {
   History,
   Bot,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  LogOut
 } from 'lucide-react';
 
 export type TabType = 'dashboard' | 'profile' | 'resumes' | 'history' | 'ai' | 'privacy';
@@ -16,13 +17,17 @@ interface SidebarProps {
   onSelectTab: (tab: TabType) => void;
   userName?: string;
   userEmail?: string;
+  userImage?: string | null;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   currentTab,
   onSelectTab,
-  userName = 'Sohel Hussain',
-  userEmail = 'sohelhussaing@gmail.com'
+  userName = 'Candidate',
+  userEmail = '',
+  userImage = null,
+  onLogout
 }) => {
   const navItems: Array<{ id: TabType; label: string; icon: React.ReactNode }> = [
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
@@ -52,9 +57,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* User Quick Info */}
       <div className="p-4 mx-3 my-3 bg-slate-800/60 rounded-xl border border-slate-700/60 flex items-center gap-3">
-        <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-sm">
-          {initials}
-        </div>
+        {userImage ? (
+          <img
+            src={userImage}
+            alt={userName}
+            className="w-9 h-9 rounded-full object-cover border border-emerald-500/30"
+          />
+        ) : (
+          <div className="w-9 h-9 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-sm">
+            {initials}
+          </div>
+        )}
         <div className="overflow-hidden">
           <div className="text-sm font-semibold text-white truncate flex items-center gap-1">
             {userName}
@@ -84,6 +97,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           );
         })}
       </nav>
+
+      {/* Sign Out Action */}
+      {onLogout && (
+        <div className="px-3 py-2 border-t border-slate-800/60">
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3.5 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-950/20 transition-colors"
+          >
+            <LogOut className="w-4 h-4 text-slate-400 group-hover:text-red-400" />
+            <span>Sign Out</span>
+          </button>
+        </div>
+      )}
 
       {/* Safety Notice */}
       <div className="p-4 border-t border-slate-800 text-[11px] text-slate-400 bg-slate-950/40">

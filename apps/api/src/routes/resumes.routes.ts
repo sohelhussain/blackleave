@@ -1,17 +1,19 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { getCurrentProfile, setCurrentProfile } from './profile.routes.js';
+import { getProfileForUser, saveProfileForUser } from '../services/profile.service.js';
 import { ResumeRecordSchema } from '@applyflow/validators';
 import { ResumeRecord } from '@applyflow/types';
 
 export const resumesRouter = Router();
 
-resumesRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const profile = getCurrentProfile();
+resumesRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
   return res.json({ resumes: profile.resumes });
 });
 
-resumesRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
+resumesRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const parsed = ResumeRecordSchema.safeParse({
     ...req.body,
     id: req.body.id || `resume_${Date.now()}`,
@@ -23,23 +25,26 @@ resumesRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
     return res.status(400).json({ error: parsed.error.format() });
   }
 
-  const profile = getCurrentProfile();
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedResumes = [...profile.resumes];
+
   // If set to default, unset previous default
   if (parsed.data.isDefault) {
-    profile.resumes.forEach((r) => (r.isDefault = false));
+    updatedResumes.forEach((r) => (r.isDefault = false));
   }
 
-  profile.resumes.push(parsed.data as ResumeRecord);
-  setCurrentProfile(profile);
+  updatedResumes.push(parsed.data as ResumeRecord);
+  await saveProfileForUser(userId, { resumes: updatedResumes });
 
   return res.status(201).json({ message: 'Resume uploaded', resume: parsed.data });
 });
 
-resumesRouter.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
+resumesRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
-  profile.resumes = profile.resumes.filter((r) => r.id !== id);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedResumes = profile.resumes.filter((r) => r.id !== id);
 
+  await saveProfileForUser(userId, { resumes: updatedResumes });
   return res.json({ message: 'Resume deleted successfully' });
 });

@@ -1,108 +1,60 @@
 import { Router, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { CONFIG } from '../config.js';
-import { calculateProfileCompleteness, INITIAL_SOHEL_PROFILE, UserProfile } from '@applyflow/types';
-import { getCurrentProfile } from './profile.routes.js';
+import { calculateProfileCompleteness } from '@applyflow/types';
+import { verifyGoogleCredential } from '../utils/google-auth.js';
+import {
+  createSession,
+  destroySession,
+  extractSessionToken,
+  validateSession,
+  findOrCreateGoogleUser
+} from '../utils/session.js';
+import { getUserProfile, upsertUserProfile } from '../services/profile.service.js';
 
 export const authRouter = Router();
 
-const AuthBodySchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(6)
-});
-
 const GoogleAuthSchema = z.object({
-  credential: z.string().optional(),
-  email: z.string().email().optional(),
-  name: z.string().optional(),
-  picture: z.string().optional(),
-  googleId: z.string().optional()
+  credential: z.string().min(1, 'Google credential is required')
 });
 
-authRouter.post('/register', (req: Request, res: Response) => {
-  const parsed = AuthBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.format() });
-  }
-
-  const token = jwt.sign({ id: 'user_sohel_hussain_01', email: parsed.data.email }, CONFIG.JWT_SECRET, {
-    expiresIn: '7d'
-  });
-
-  return res.status(201).json({
-    message: 'User registered successfully',
-    token,
-    user: { id: 'user_sohel_hussain_01', email: parsed.data.email }
-  });
-});
-
-authRouter.post('/login', (req: Request, res: Response) => {
-  const parsed = AuthBodySchema.safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.format() });
-  }
-
-  const token = jwt.sign({ id: 'user_sohel_hussain_01', email: parsed.data.email }, CONFIG.JWT_SECRET, {
-    expiresIn: '7d'
-  });
-
-  const profile = getCurrentProfile();
-  const completion = calculateProfileCompleteness(profile);
-
-  return res.json({
-    message: 'Logged in successfully',
-    token,
-    user: { id: 'user_sohel_hussain_01', email: parsed.data.email },
-    profile,
-    completion
-  });
-});
-
+/**
+ * POST /api/auth/google
+ * Verifies Google OpenID token cryptographically.
+ * Finds or creates user and initial candidate profile in PostgreSQL.
+ * Sets secure HTTP-only session cookie.
+ */
 authRouter.post('/google', async (req: Request, res: Response) => {
   const parsed = GoogleAuthSchema.safeParse(req.body);
   if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.format() });
-  }
-
-  let email = parsed.data.email;
-  let name = parsed.data.name;
-  let picture = parsed.data.picture;
-  let googleId = parsed.data.googleId;
-
-  // If a raw Google JWT credential was provided, parse payload safely
-  if (parsed.data.credential) {
-    try {
-      const decoded: any = jwt.decode(parsed.data.credential);
-      if (decoded && decoded.email) {
-        email = decoded.email;
-        name = decoded.name || name;
-        picture = decoded.picture || picture;
-        googleId = decoded.sub || googleId;
+    return res.status(400).json({
+      success: false,
+      error: {
+        code: 'VALIDATION_ERROR',
+        message: 'A valid Google authentication credential is required'
       }
-    } catch (e) {
-      // Fallback to directly provided fields
-    }
+    });
   }
 
-  if (!email) {
-    // Default to demo/seed user if offline or testing
-    email = 'sohelhussaing@gmail.com';
-    name = 'Sohel Hussain';
-  }
+  try {
+    // 1. Properly verify Google credential (signature, issuer, aud, exp, email, sub)
+    const verifiedGoogleUser = await verifyGoogleCredential(parsed.data.credential);
 
-  // Check if existing user (e.g. Sohel Hussain seed)
-  const isExisting = email.toLowerCase() === 'sohelhussaing@gmail.com';
-  const profile: UserProfile = isExisting
-    ? getCurrentProfile()
-    : {
-        id: `user_${Date.now()}`,
+    // 2. Find or create user in PostgreSQL
+    const { user, isNewUser } = await findOrCreateGoogleUser(verifiedGoogleUser);
+
+    // 3. Create persistent server session & set HTTP-only cookie
+    const { token, expiresAt } = await createSession(user.id, res);
+
+    // 4. Retrieve or initialize user profile
+    let profile = await getUserProfile(user.id);
+    if (!profile) {
+      profile = await upsertUserProfile(user.id, {
         personal: {
-          fullName: name || '',
-          firstName: name ? name.split(' ')[0] : '',
-          lastName: name && name.split(' ').length > 1 ? name.split(' ').slice(1).join(' ') : '',
-          preferredName: name ? name.split(' ')[0] : '',
-          email: email,
+          fullName: user.name || '',
+          firstName: user.name ? user.name.split(' ')[0] : '',
+          lastName: user.name && user.name.split(' ').length > 1 ? user.name.split(' ').slice(1).join(' ') : '',
+          preferredName: user.name ? user.name.split(' ')[0] : '',
+          email: user.email,
           phone: '',
           city: '',
           state: '',
@@ -111,92 +63,96 @@ authRouter.post('/google', async (req: Request, res: Response) => {
           linkedin: '',
           github: '',
           portfolio: ''
-        },
-        jobPreferences: {
-          targetRoles: [],
-          targetJobTitles: [],
-          targetIndustries: [],
-          employmentTypes: ['Full-time'],
-          workModes: ['Remote'],
-          preferredLocations: [],
-          willingToRelocate: false,
-          willingToWorkRemotely: true,
-          noticePeriod: 'Immediate'
-        },
-        education: [],
-        school: { tenthPercentage: '', twelfthPercentage: '', twelfthStream: '' },
-        workAuthorization: {
-          indiaAuthorized: false,
-          indiaSponsorshipRequired: false,
-          usAuthorized: false,
-          usSponsorshipRequired: false,
-          europeAuthorized: false,
-          europeSponsorshipRequired: false,
-          countries: []
-        },
-        experience: [],
-        projects: [],
-        skills: {
-          programming: [],
-          frontend: [],
-          backend: [],
-          database: [],
-          infrastructure: [],
-          blockchain: [],
-          realtime: [],
-          auth: [],
-          other: []
-        },
-        resumes: [],
-        applicationQuestions: []
-      };
+        }
+      });
+    }
 
-  const token = jwt.sign(
-    { id: profile.id, email, name, googleId },
-    CONFIG.JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  const completion = calculateProfileCompleteness(profile);
-
-  return res.json({
-    success: true,
-    token,
-    isNewUser: !isExisting,
-    user: {
-      id: profile.id,
-      email,
-      name: name || profile.personal.fullName,
-      picture: picture || null
-    },
-    profile,
-    completion
-  });
-});
-
-authRouter.get('/me', (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  try {
-    const decoded: any = jwt.verify(token, CONFIG.JWT_SECRET);
-    const profile = getCurrentProfile();
     const completion = calculateProfileCompleteness(profile);
 
     return res.json({
       success: true,
+      authenticated: true,
+      isNewUser,
+      token,
+      expiresAt: expiresAt.toISOString(),
       user: {
-        id: decoded.id,
-        email: decoded.email,
-        name: decoded.name || profile.personal.fullName
+        id: user.id,
+        email: user.email,
+        name: user.name || profile.personal.fullName,
+        image: user.image || null
       },
       profile,
       completion
     });
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+  } catch (err: any) {
+    console.error('[Auth Error] Google login failed:', err.message);
+    return res.status(401).json({
+      success: false,
+      error: {
+        code: 'AUTHENTICATION_FAILED',
+        message: err.message || 'Google sign-in failed. Please try again.'
+      }
+    });
   }
+});
+
+/**
+ * GET /api/auth/session
+ * Restores session from HTTP-only cookie or Authorization header.
+ * Returns { authenticated: true, user, profile, completion } or { authenticated: false }.
+ */
+authRouter.get('/session', async (req: Request, res: Response) => {
+  const token = extractSessionToken(req);
+
+  if (!token) {
+    return res.json({ authenticated: false });
+  }
+
+  try {
+    const session = await validateSession(token);
+
+    if (!session || !session.user) {
+      return res.json({ authenticated: false });
+    }
+
+    const profile = await getUserProfile(session.user.id);
+    const completion = profile ? calculateProfileCompleteness(profile) : null;
+
+    return res.json({
+      authenticated: true,
+      user: {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name || profile?.personal?.fullName || '',
+        image: session.user.image || null
+      },
+      profile,
+      completion
+    });
+  } catch (err: any) {
+    console.error('[Auth Error] Session validation failed:', err.message);
+    return res.json({ authenticated: false });
+  }
+});
+
+/**
+ * POST /api/auth/logout
+ * Destroys server-side session from database and clears HTTP-only cookie.
+ * Does NOT delete candidate profile or user data.
+ */
+authRouter.post('/logout', async (req: Request, res: Response) => {
+  const token = extractSessionToken(req);
+
+  if (token) {
+    await destroySession(token, res);
+  } else {
+    // Ensure cookie is cleared even if token header was missing
+    res.clearCookie('session_token', { path: '/' });
+  }
+
+  return res.json({
+    success: true,
+    authenticated: false,
+    message: 'Logged out successfully'
+  });
 });

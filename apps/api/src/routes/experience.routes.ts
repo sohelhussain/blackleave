@@ -1,18 +1,20 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { getCurrentProfile, setCurrentProfile } from './profile.routes.js';
+import { getProfileForUser, saveProfileForUser } from '../services/profile.service.js';
 import { ExperienceRecordSchema } from '@applyflow/validators';
 import { ExperienceRecord } from '@applyflow/types';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 export const experienceRouter = Router();
 
-experienceRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const profile = getCurrentProfile();
+experienceRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
   return sendSuccess(res, { experience: profile.experience });
 });
 
-experienceRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
+experienceRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const parsed = ExperienceRecordSchema.safeParse({
     ...req.body,
     id: req.body.id || `exp_${Date.now()}`
@@ -22,16 +24,17 @@ experienceRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  const profile = getCurrentProfile();
-  profile.experience.push(parsed.data as ExperienceRecord);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedExperience = [...profile.experience, parsed.data as ExperienceRecord];
+  await saveProfileForUser(userId, { experience: updatedExperience });
 
   return sendSuccess(res, { experience: parsed.data }, 201);
 });
 
-experienceRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
+experienceRouter.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
+  const profile = req.profile || await getProfileForUser(userId);
   const index = profile.experience.findIndex((e) => e.id === id);
 
   if (index === -1) {
@@ -43,20 +46,22 @@ experienceRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  profile.experience[index] = {
-    ...profile.experience[index],
+  const updatedExperience = [...profile.experience];
+  updatedExperience[index] = {
+    ...updatedExperience[index],
     ...parsed.data
   };
-  setCurrentProfile(profile);
 
-  return sendSuccess(res, { experience: profile.experience[index] });
+  await saveProfileForUser(userId, { experience: updatedExperience });
+  return sendSuccess(res, { experience: updatedExperience[index] });
 });
 
-experienceRouter.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
+experienceRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
-  profile.experience = profile.experience.filter((e) => e.id !== id);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedExperience = profile.experience.filter((e) => e.id !== id);
 
-  return sendSuccess(res, { message: 'Experience deleted successfully' });
+  await saveProfileForUser(userId, { experience: updatedExperience });
+  return sendSuccess(res, { message: 'Experience record deleted successfully' });
 });

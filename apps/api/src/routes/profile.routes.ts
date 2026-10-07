@@ -1,36 +1,52 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { INITIAL_SOHEL_PROFILE, UserProfile } from '@applyflow/types';
+import { calculateProfileCompleteness } from '@applyflow/types';
 import { UserProfileSchema } from '@applyflow/validators';
 import { sendSuccess, sendError } from '../utils/response.js';
+import { getProfileForUser, upsertUserProfile } from '../services/profile.service.js';
 
 export const profileRouter = Router();
 
-// In-memory / active state backed by initial profile
-let currentProfile: UserProfile = JSON.parse(JSON.stringify(INITIAL_SOHEL_PROFILE));
-
-export function getCurrentProfile(): UserProfile {
-  return currentProfile;
-}
-
-import { calculateProfileCompleteness } from '@applyflow/types';
-
-export function setCurrentProfile(newProfile: UserProfile): void {
-  currentProfile = newProfile;
-}
-
-profileRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const completion = calculateProfileCompleteness(currentProfile);
-  return sendSuccess(res, { profile: currentProfile, completion });
+profileRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
+  const completion = calculateProfileCompleteness(profile);
+  return sendSuccess(res, { profile, completion });
 });
 
-profileRouter.put('/', (req: AuthenticatedRequest, res: Response) => {
-  const parsed = UserProfileSchema.partial().safeParse(req.body);
+import {
+  PersonalInfoSchema,
+  JobPreferencesSchema,
+  WorkAuthorizationSchema,
+  EducationRecordSchema,
+  ExperienceRecordSchema,
+  ProjectRecordSchema,
+  ResumeRecordSchema,
+  ProfileApplicationQuestionSchema
+} from '@applyflow/validators';
+import { z } from 'zod';
+
+const UpdateProfileSchema = z.object({
+  personal: PersonalInfoSchema.partial().optional(),
+  jobPreferences: JobPreferencesSchema.partial().optional(),
+  workAuthorization: WorkAuthorizationSchema.partial().optional(),
+  education: z.array(EducationRecordSchema).optional(),
+  experience: z.array(ExperienceRecordSchema).optional(),
+  projects: z.array(ProjectRecordSchema).optional(),
+  skills: z.record(z.array(z.string())).optional(),
+  resumes: z.array(ResumeRecordSchema).optional(),
+  applicationQuestions: z.array(ProfileApplicationQuestionSchema).optional()
+});
+
+profileRouter.put('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const parsed = UpdateProfileSchema.safeParse(req.body);
   if (!parsed.success) {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
   // Synchronize country work authorization into legacy flags if present
+  const currentProfile = req.profile || await getProfileForUser(userId);
   const incomingAuth = parsed.data.workAuthorization;
   let syncedAuth = incomingAuth ? { ...currentProfile.workAuthorization, ...incomingAuth } : currentProfile.workAuthorization;
 
@@ -53,27 +69,16 @@ profileRouter.put('/', (req: AuthenticatedRequest, res: Response) => {
     }
   }
 
-  currentProfile = {
-    ...currentProfile,
+  const updated = await upsertUserProfile(userId, {
     ...parsed.data,
-    personal: {
-      ...currentProfile.personal,
-      ...(parsed.data.personal || {})
-    },
-    jobPreferences: {
-      ...currentProfile.jobPreferences,
-      ...(parsed.data.jobPreferences || {})
-    },
-    workAuthorization: syncedAuth,
-    applicationQuestions: parsed.data.applicationQuestions !== undefined ? parsed.data.applicationQuestions : currentProfile.applicationQuestions,
-    updatedAt: new Date().toISOString()
-  };
+    workAuthorization: syncedAuth
+  });
 
-  const completion = calculateProfileCompleteness(currentProfile);
-  return sendSuccess(res, { profile: currentProfile, completion, message: 'Profile updated successfully' });
+  const completion = calculateProfileCompleteness(updated);
+  return sendSuccess(res, { profile: updated, completion, message: 'Profile updated successfully' });
 });
 
-profileRouter.delete('/', (req: AuthenticatedRequest, res: Response) => {
+profileRouter.delete('/', async (req: AuthenticatedRequest, res: Response) => {
   const { confirm } = req.body;
   if (confirm !== true) {
     return sendError(
@@ -83,15 +88,15 @@ profileRouter.delete('/', (req: AuthenticatedRequest, res: Response) => {
     );
   }
 
-  // Reset profile to empty state
-  currentProfile = {
-    id: 'user_deleted',
+  const userId = req.user!.id;
+  // Reset only the authenticated user's profile
+  const reset = await upsertUserProfile(userId, {
     personal: {
       fullName: '',
       firstName: '',
       lastName: '',
       preferredName: '',
-      email: '',
+      email: req.user!.email,
       phone: '',
       city: '',
       state: '',
@@ -99,41 +104,14 @@ profileRouter.delete('/', (req: AuthenticatedRequest, res: Response) => {
       pincode: '',
       linkedin: '',
       github: '',
-      portfolio: ''
-    },
-    jobPreferences: {
-      targetRoles: [],
-      employmentTypes: [],
-      preferredLocations: [],
-      willingToRelocate: false,
-      willingToWorkRemotely: false,
-      noticePeriod: ''
+      portfolio: '',
+      summary: ''
     },
     education: [],
-    school: { tenthPercentage: '', twelfthPercentage: '', twelfthStream: '' },
-    workAuthorization: {
-      indiaAuthorized: false,
-      indiaSponsorshipRequired: false,
-      usAuthorized: false,
-      usSponsorshipRequired: false,
-      europeAuthorized: false,
-      europeSponsorshipRequired: false
-    },
     experience: [],
     projects: [],
-    skills: {
-      programming: [],
-      frontend: [],
-      backend: [],
-      database: [],
-      infrastructure: [],
-      blockchain: [],
-      realtime: [],
-      auth: [],
-      other: []
-    },
-    resumes: []
-  };
+    applicationQuestions: []
+  });
 
-  return sendSuccess(res, { message: 'All profile data deleted successfully.' });
+  return sendSuccess(res, { message: 'Profile reset successfully', profile: reset });
 });

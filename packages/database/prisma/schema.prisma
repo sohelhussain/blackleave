@@ -8,21 +8,36 @@ generator client {
 }
 
 model User {
-  id           String        @id @default(uuid())
-  email        String        @unique
-  passwordHash String?
-  googleId     String?       @unique
-  avatarUrl    String?
-  profile      Profile?
-  applications Application[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id            String        @id @default(uuid())
+  email         String        @unique
+  name          String?
+  image         String?
+  googleSubject String?       @unique
+  googleId      String?       @unique
+  passwordHash  String?
+  avatarUrl     String?
+  lastLoginAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  applications  Application[]
+  profile       Profile?
+  sessions      Session[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }
 
 model Profile {
   id                    String                   @id @default(uuid())
   userId                String                   @unique
   user                  User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileCompleted      Boolean                  @default(false)
   fullName              String
   firstName             String
   lastName              String
@@ -67,20 +82,20 @@ model Profile {
 }
 
 model JobPreference {
-  id                   String   @id @default(uuid())
-  profileId            String   @unique
-  profile              Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  targetRoles          String[]
-  employmentTypes      String[]
-  preferredLocations   String[]
-  willingToRelocate    Boolean  @default(true)
-  willingToWorkRemotely Boolean @default(true)
-  noticePeriod         String
-  expectedSalaryMin    Int?
-  expectedSalaryMax    Int?
-  salaryCurrency       String   @default("INR")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                    String   @id @default(uuid())
+  profileId             String   @unique
+  profile               Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  targetRoles           String[]
+  employmentTypes       String[]
+  preferredLocations    String[]
+  willingToRelocate     Boolean  @default(true)
+  willingToWorkRemotely Boolean  @default(true)
+  noticePeriod          String
+  expectedSalaryMin     Int?
+  expectedSalaryMax     Int?
+  salaryCurrency        String   @default("INR")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model WorkAuthorization {
@@ -140,16 +155,16 @@ model ProfileQuestionAnswer {
 }
 
 model CoverLetter {
-  id             String   @id @default(uuid())
-  profileId      String
-  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  title          String
-  content        String
-  isDefault      Boolean  @default(false)
-  targetRole     String?
-  targetCompany  String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(uuid())
+  profileId     String
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title         String
+  content       String
+  isDefault     Boolean  @default(false)
+  targetRole    String?
+  targetCompany String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Education {
@@ -207,7 +222,7 @@ model Skill {
   id        String   @id @default(uuid())
   profileId String
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  category  String   // e.g., 'programming', 'frontend', 'backend', 'database', etc.
+  category  String
   name      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -219,14 +234,14 @@ model Resume {
   profile        Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
   name           String
   fileName       String
-  fileData       String?       // base64 or storage url
-  fileType       String?       // application/pdf
+  fileData       String?
+  fileType       String?
   targetRoles    String[]
   relevantSkills String[]
   isDefault      Boolean       @default(false)
-  applications   Application[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  applications   Application[]
 }
 
 model Application {
@@ -238,15 +253,15 @@ model Application {
   url            String
   date           String
   resumeUsedId   String?
-  resumeUsed     Resume?            @relation(fields: [resumeUsedId], references: [id], onDelete: SetNull)
+  resumeUsed     Resume?            @relation(fields: [resumeUsedId], references: [id])
   fieldsFilled   Int                @default(0)
   aiAnswersCount Int                @default(0)
-  status         String             @default("Draft") // Draft, Reviewed, Applied, Rejected, Interview, Offer
+  status         String             @default("Draft")
   notes          String?
-  fields         ApplicationField[]
-  aiAnswers      AIAnswer[]
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
+  fields         ApplicationField[]
+  aiAnswers      AIAnswer[]
 }
 
 model ApplicationField {
@@ -257,7 +272,7 @@ model ApplicationField {
   fieldType             String
   suggestedProfileField String?
   confidence            Float
-  source                String      // deterministic, ai, manual
+  source                String
   suggestedValue        String?
   userValue             String?
   approved              Boolean     @default(false)
@@ -266,14 +281,14 @@ model ApplicationField {
 }
 
 model AIAnswer {
-  id             String      @id @default(uuid())
+  id             String       @id @default(uuid())
   applicationId  String?
   application    Application? @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   question       String
-  classification String      // BEHAVIORAL, PROJECT, etc.
+  classification String
   confidence     Float
   answer         String
   reason         String?
   sourceIds      String[]
-  createdAt      DateTime    @default(now())
+  createdAt      DateTime     @default(now())
 }

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { GeminiService, JobAnalyzer } from '@applyflow/ai';
 import { CONFIG } from '../config.js';
-import { getCurrentProfile } from './profile.routes.js';
+import { getProfileForUser } from '../services/profile.service.js';
 import { z } from 'zod';
 import { FieldCategorySchema } from '@applyflow/validators';
 
@@ -27,7 +27,8 @@ aiRouter.post('/generate-answer', async (req: AuthenticatedRequest, res: Respons
     return res.status(400).json({ error: parsed.error.format() });
   }
 
-  const profile = getCurrentProfile();
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
 
   try {
     const result = await geminiService.generateAnswer({
@@ -44,7 +45,7 @@ aiRouter.post('/generate-answer', async (req: AuthenticatedRequest, res: Respons
   }
 });
 
-aiRouter.post('/classify-field', (req: AuthenticatedRequest, res: Response) => {
+aiRouter.post('/classify-field', async (req: AuthenticatedRequest, res: Response) => {
   const { label } = req.body;
   if (!label) {
     return res.status(400).json({ error: 'Label is required' });
@@ -55,7 +56,8 @@ aiRouter.post('/classify-field', (req: AuthenticatedRequest, res: Response) => {
   let confidence = 0.5;
   const relevantSources: string[] = [];
 
-  const profile = getCurrentProfile();
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
 
   if (/why.*?(?:product\s*management|role|position|opportunity|engineering)/i.test(clean) || /interest\s*in\s*(?:product|role|position)/i.test(clean)) {
     category = 'ROLE_MOTIVATION';
@@ -104,7 +106,9 @@ aiRouter.post('/analyze-job', async (req: AuthenticatedRequest, res: Response) =
     return res.status(400).json({ error: 'jobText is required' });
   }
 
-  const profile = getCurrentProfile();
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
+
   try {
     const analysis = await jobAnalyzer.analyzeJob({ jobText, pageUrl, pageTitle }, profile);
     return res.json({ analysis });

@@ -1,18 +1,20 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { getCurrentProfile, setCurrentProfile } from './profile.routes.js';
+import { getProfileForUser, saveProfileForUser } from '../services/profile.service.js';
 import { ProjectRecordSchema } from '@applyflow/validators';
 import { ProjectRecord } from '@applyflow/types';
 import { sendSuccess, sendError } from '../utils/response.js';
 
 export const projectsRouter = Router();
 
-projectsRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
-  const profile = getCurrentProfile();
+projectsRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
+  const profile = req.profile || await getProfileForUser(userId);
   return sendSuccess(res, { projects: profile.projects });
 });
 
-projectsRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
+projectsRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const parsed = ProjectRecordSchema.safeParse({
     ...req.body,
     id: req.body.id || `proj_${Date.now()}`
@@ -22,16 +24,17 @@ projectsRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  const profile = getCurrentProfile();
-  profile.projects.push(parsed.data as ProjectRecord);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedProjects = [...profile.projects, parsed.data as ProjectRecord];
+  await saveProfileForUser(userId, { projects: updatedProjects });
 
   return sendSuccess(res, { project: parsed.data }, 201);
 });
 
-projectsRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
+projectsRouter.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
+  const profile = req.profile || await getProfileForUser(userId);
   const index = profile.projects.findIndex((p) => p.id === id);
 
   if (index === -1) {
@@ -43,20 +46,22 @@ projectsRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
     return sendError(res, 'VALIDATION_ERROR', parsed.error.errors.map((e) => e.message).join(', '));
   }
 
-  profile.projects[index] = {
-    ...profile.projects[index],
+  const updatedProjects = [...profile.projects];
+  updatedProjects[index] = {
+    ...updatedProjects[index],
     ...parsed.data
   };
-  setCurrentProfile(profile);
 
-  return sendSuccess(res, { project: profile.projects[index] });
+  await saveProfileForUser(userId, { projects: updatedProjects });
+  return sendSuccess(res, { project: updatedProjects[index] });
 });
 
-projectsRouter.delete('/:id', (req: AuthenticatedRequest, res: Response) => {
+projectsRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.id;
   const { id } = req.params;
-  const profile = getCurrentProfile();
-  profile.projects = profile.projects.filter((p) => p.id !== id);
-  setCurrentProfile(profile);
+  const profile = req.profile || await getProfileForUser(userId);
+  const updatedProjects = profile.projects.filter((p) => p.id !== id);
 
-  return sendSuccess(res, { message: 'Project deleted successfully' });
+  await saveProfileForUser(userId, { projects: updatedProjects });
+  return sendSuccess(res, { message: 'Project record deleted successfully' });
 });

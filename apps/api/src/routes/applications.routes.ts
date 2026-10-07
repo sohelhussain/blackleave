@@ -1,43 +1,21 @@
 import { Router, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { ApplicationRecord } from '@applyflow/types';
+import { getPrismaClient } from '@applyflow/database';
 import { ApplicationRecordSchema } from '@applyflow/validators';
 
 export const applicationsRouter = Router();
 
-// In-memory application tracker for session / history
-let applications: ApplicationRecord[] = [
-  {
-    id: 'app_demo_01',
-    company: 'Anthropic',
-    role: 'Software Engineer',
-    url: 'https://jobs.lever.co/anthropic/software-engineer',
-    date: '2025-06-01',
-    resumeUsed: 'General Software Engineer Resume',
-    fieldsFilled: 18,
-    aiAnswersCount: 2,
-    status: 'Applied',
-    notes: 'Submitted via Lever job board. Highlighted React and distributed systems.'
-  },
-  {
-    id: 'app_demo_02',
-    company: 'Stripe',
-    role: 'Backend Engineer',
-    url: 'https://boards.greenhouse.io/stripe/jobs/backend-engineer',
-    date: '2025-06-05',
-    resumeUsed: 'Backend Resume',
-    fieldsFilled: 22,
-    aiAnswersCount: 4,
-    status: 'Interview',
-    notes: 'Technical screening scheduled for next week.'
-  }
-];
+applicationsRouter.get('/', async (req: AuthenticatedRequest, res: Response) => {
+  const prisma = getPrismaClient();
+  const applications = await prisma.application.findMany({
+    where: { userId: req.user!.id },
+    orderBy: { createdAt: 'desc' }
+  });
 
-applicationsRouter.get('/', (req: AuthenticatedRequest, res: Response) => {
   return res.json({ applications });
 });
 
-applicationsRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
+applicationsRouter.post('/', async (req: AuthenticatedRequest, res: Response) => {
   const parsed = ApplicationRecordSchema.safeParse({
     ...req.body,
     id: req.body.id || `app_${Date.now()}`,
@@ -49,27 +27,62 @@ applicationsRouter.post('/', (req: AuthenticatedRequest, res: Response) => {
     return res.status(400).json({ error: parsed.error.format() });
   }
 
-  applications.unshift(parsed.data as ApplicationRecord);
-  return res.status(201).json({ message: 'Application recorded', application: parsed.data });
+  const prisma = getPrismaClient();
+  const created = await prisma.application.create({
+    data: {
+      id: parsed.data.id,
+      userId: req.user!.id,
+      company: parsed.data.company,
+      role: parsed.data.role,
+      url: parsed.data.url,
+      date: parsed.data.date,
+      fieldsFilled: parsed.data.fieldsFilled || 0,
+      aiAnswersCount: parsed.data.aiAnswersCount || 0,
+      status: parsed.data.status || 'Draft',
+      notes: parsed.data.notes || null
+    }
+  });
+
+  return res.status(201).json({ message: 'Application recorded', application: created });
 });
 
-applicationsRouter.put('/:id', (req: AuthenticatedRequest, res: Response) => {
+applicationsRouter.put('/:id', async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
-  const index = applications.findIndex((a) => a.id === id);
+  const prisma = getPrismaClient();
 
-  if (index === -1) {
-    return res.status(404).json({ error: 'Application record not found' });
+  const existing = await prisma.application.findFirst({
+    where: { id, userId: req.user!.id }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: 'Application not found' });
   }
 
-  const parsed = ApplicationRecordSchema.partial().safeParse(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.format() });
+  const updated = await prisma.application.update({
+    where: { id },
+    data: {
+      ...(req.body.company ? { company: req.body.company } : {}),
+      ...(req.body.role ? { role: req.body.role } : {}),
+      ...(req.body.status ? { status: req.body.status } : {}),
+      ...(req.body.notes !== undefined ? { notes: req.body.notes } : {})
+    }
+  });
+
+  return res.json({ application: updated });
+});
+
+applicationsRouter.delete('/:id', async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  const prisma = getPrismaClient();
+
+  const existing = await prisma.application.findFirst({
+    where: { id, userId: req.user!.id }
+  });
+
+  if (!existing) {
+    return res.status(404).json({ error: 'Application not found' });
   }
 
-  applications[index] = {
-    ...applications[index],
-    ...parsed.data
-  };
-
-  return res.json({ message: 'Application status updated', application: applications[index] });
+  await prisma.application.delete({ where: { id } });
+  return res.json({ message: 'Application deleted successfully' });
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar, TabType } from './components/Sidebar';
 import { DashboardPage } from './views/DashboardPage';
 import { ProfilePage } from './views/ProfilePage';
@@ -8,185 +9,83 @@ import { AISettingsPage } from './views/AISettingsPage';
 import { PrivacyPage } from './views/PrivacyPage';
 import { LandingPage } from './components/LandingPage';
 import { OnboardingWizard } from './components/OnboardingWizard';
-import { INITIAL_SOHEL_PROFILE, UserProfile, ApplicationRecord, ResumeRecord, calculateProfileCompleteness } from '@applyflow/types';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { UserProfile, ApplicationRecord } from '@applyflow/types';
+import { LogOut } from 'lucide-react';
 
-export const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
-  const [currentUser, setCurrentUser] = useState<{ id: string; email: string; name: string } | null>({
-    id: 'user_sohel_hussain_01',
-    email: 'sohelhussaing@gmail.com',
-    name: 'Sohel Hussain'
-  });
-  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+const AppContent: React.FC = () => {
+  const {
+    user,
+    profile,
+    completion,
+    isAuthenticated,
+    isLoading,
+    error,
+    loginWithGoogle,
+    logout,
+    saveProfile
+  } = useAuth();
+
   const [currentTab, setCurrentTab] = useState<TabType>('dashboard');
-  const [profile, setProfile] = useState<UserProfile>(INITIAL_SOHEL_PROFILE);
-  const [applications, setApplications] = useState<ApplicationRecord[]>([
-    {
-      id: 'app_01',
-      company: 'Greenhouse Mock Tech',
-      role: 'Software Engineer Intern',
-      url: 'http://localhost:5173/test-pages/greenhouse-mock.html',
-      date: '2025-06-10',
-      resumeUsed: 'General Software Engineer Resume',
-      fieldsFilled: 14,
-      aiAnswersCount: 2,
-      status: 'Applied',
-      notes: 'Autofilled with verified education and projects. Answered behavioral with Saurce.'
-    },
-    {
-      id: 'app_02',
-      company: 'Lever Systems',
-      role: 'Backend Engineer',
-      url: 'http://localhost:5173/test-pages/lever-mock.html',
-      date: '2025-06-12',
-      resumeUsed: 'Backend Resume',
-      fieldsFilled: 19,
-      aiAnswersCount: 3,
-      status: 'Interview',
-      notes: 'Screening round on DPI Engine SNI extraction project.'
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(false);
+  const [applications, setApplications] = useState<ApplicationRecord[]>([]);
+
+  // Automatically prompt onboarding if new user or profile completion is very low
+  useEffect(() => {
+    if (isAuthenticated && profile && completion && completion.score < 40) {
+      setShowOnboarding(true);
     }
-  ]);
-  const [loading, setLoading] = useState(true);
+  }, [isAuthenticated, profile, completion]);
 
   useEffect(() => {
-    fetchProfile();
-    fetchApplications();
-  }, []);
-
-  async function fetchProfile() {
-    try {
-      const res = await fetch('/api/profile');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.profile) setProfile(data.profile);
-      }
-    } catch {
-      // Fallback to initial Sohel profile if API server offline
-      setProfile(INITIAL_SOHEL_PROFILE);
-    } finally {
-      setLoading(false);
+    if (isAuthenticated) {
+      fetchApplications();
     }
-  }
+  }, [isAuthenticated]);
 
   async function fetchApplications() {
     try {
-      const res = await fetch('/api/applications');
+      const res = await fetch('/api/applications', {
+        credentials: 'include'
+      });
       if (res.ok) {
         const data = await res.json();
         if (data.applications) setApplications(data.applications);
       }
     } catch {
-      // Local fallback
+      // Ignored
     }
   }
 
-  async function handleGoogleSignIn() {
-    try {
-      const res = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'new.candidate@example.com', name: 'Alex Taylor' })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setIsAuthenticated(true);
-        setCurrentUser(data.user);
-        if (data.profile) setProfile(data.profile);
-        if (data.isNewUser || (data.completion && data.completion.score < 60)) {
-          setShowOnboarding(true);
-        }
-      } else {
-        // Fallback for offline demo
-        setIsAuthenticated(true);
-        setShowOnboarding(true);
-      }
-    } catch {
-      setIsAuthenticated(true);
-      setShowOnboarding(true);
-    }
-  }
+  const handleSaveProfile = async (updated: UserProfile) => {
+    await saveProfile(updated);
+  };
 
-  function handleDemoSignIn() {
-    setIsAuthenticated(true);
-    setCurrentUser({
-      id: 'user_sohel_hussain_01',
-      email: 'sohelhussaing@gmail.com',
-      name: 'Sohel Hussain'
-    });
-    setProfile(INITIAL_SOHEL_PROFILE);
-    setShowOnboarding(false);
-  }
-
-  function handleLogout() {
-    setIsAuthenticated(false);
-    setCurrentUser(null);
-    setShowOnboarding(false);
-  }
-
-  async function handleSaveProfile(updated: UserProfile) {
-    setProfile(updated);
-    try {
-      await fetch('/api/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated)
-      });
-    } catch (err) {
-      console.warn('Could not save to API server:', err);
-    }
-  }
-
-  async function handleCompleteOnboarding(updated: UserProfile) {
-    await handleSaveProfile(updated);
+  const handleCompleteOnboarding = async (updated: UserProfile) => {
+    await saveProfile(updated);
     setShowOnboarding(false);
     setCurrentTab('dashboard');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300">
+        <div className="w-10 h-10 border-3 border-sky-500 border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-sm font-medium text-slate-400">Verifying session...</p>
+      </div>
+    );
   }
 
-  async function handleUpdateResumes(resumes: ResumeRecord[]) {
-    const updated = { ...profile, resumes };
-    await handleSaveProfile(updated);
-  }
-
-  async function handleUpdateStatus(id: string, newStatus: ApplicationRecord['status']) {
-    const updated = applications.map((a) => (a.id === id ? { ...a, status: newStatus } : a));
-    setApplications(updated);
-    try {
-      await fetch(`/api/applications/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-    } catch {
-      // Fallback
-    }
-  }
-
-  async function handleDeleteAllData() {
-    try {
-      await fetch('/api/profile', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm: true })
-      });
-    } catch {
-      // Offline fallback
-    }
-    setProfile({
-      ...INITIAL_SOHEL_PROFILE,
-      personal: { ...INITIAL_SOHEL_PROFILE.personal, fullName: '', email: '', phone: '' },
-      experience: [],
-      projects: [],
-      education: [],
-      applicationQuestions: []
-    });
-  }
-
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user || !profile) {
     return (
       <LandingPage
-        onGoogleSignIn={handleGoogleSignIn}
-        onDemoSignIn={handleDemoSignIn}
+        onGoogleCredential={async (cred) => {
+          const res = await loginWithGoogle(cred);
+          if (res.success && res.isNewUser) {
+            setShowOnboarding(true);
+          }
+          return res;
+        }}
+        errorMessage={error}
       />
     );
   }
@@ -196,8 +95,10 @@ export const App: React.FC = () => {
       <Sidebar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}
-        userName={currentUser?.name || profile.personal.fullName}
-        userEmail={currentUser?.email || profile.personal.email}
+        userName={user.name || profile.personal.fullName}
+        userEmail={user.email || profile.personal.email}
+        userImage={user.image}
+        onLogout={logout}
       />
 
       <div className="flex-1 flex flex-col overflow-y-auto">
@@ -225,7 +126,7 @@ export const App: React.FC = () => {
             </button>
 
             <button
-              onClick={handleLogout}
+              onClick={logout}
               className="flex items-center gap-1.5 text-slate-500 hover:text-red-600 font-medium px-2 py-1 rounded hover:bg-slate-50 transition-colors"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -240,7 +141,7 @@ export const App: React.FC = () => {
             <DashboardPage
               profile={profile}
               applications={applications}
-              onNavigate={setCurrentTab}
+              onNavigate={(tab) => setCurrentTab(tab as TabType)}
             />
           )}
 
@@ -254,26 +155,53 @@ export const App: React.FC = () => {
           {currentTab === 'resumes' && (
             <ResumesPage
               profile={profile}
-              onUpdateResumes={handleUpdateResumes}
+              onUpdateResumes={async (updatedResumes) => {
+                await handleSaveProfile({ ...profile, resumes: updatedResumes });
+              }}
+              onMergeImportedProfile={async (imported) => {
+                await handleSaveProfile({ ...profile, ...imported });
+              }}
             />
           )}
 
           {currentTab === 'history' && (
             <HistoryPage
               applications={applications}
-              onUpdateStatus={handleUpdateStatus}
+              onUpdateStatus={async (id, newStatus) => {
+                await fetch(`/api/applications/${id}`, {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ status: newStatus })
+                });
+                setApplications((prev) =>
+                  prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
+                );
+              }}
             />
           )}
 
-          {currentTab === 'ai' && <AISettingsPage />}
+          {currentTab === 'ai' && (
+            <AISettingsPage />
+          )}
 
           {currentTab === 'privacy' && (
-            <PrivacyPage onDeleteAllData={handleDeleteAllData} />
+            <PrivacyPage
+              onDeleteAllData={async () => {
+                await fetch('/api/profile', {
+                  method: 'DELETE',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ confirm: true })
+                });
+                await logout();
+              }}
+            />
           )}
         </main>
       </div>
 
-      {/* Onboarding Wizard Modal if open */}
+      {/* Onboarding Wizard Modal */}
       {showOnboarding && (
         <OnboardingWizard
           initialProfile={profile}
@@ -282,5 +210,13 @@ export const App: React.FC = () => {
         />
       )}
     </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 };
