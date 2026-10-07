@@ -14,12 +14,12 @@
     "db:setup": "prisma db push && node --experimental-strip-types prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.15.0",
+    "@prisma/client": "5.22.0",
     "@applyflow/types": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
-    "prisma": "^5.15.0",
+    "prisma": "5.22.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   }

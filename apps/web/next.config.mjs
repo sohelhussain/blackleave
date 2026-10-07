@@ -1,7 +1,28 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const monorepoRoot = path.resolve(__dirname, '../../');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui', '@applyflow/database'],
+  experimental: {
+    serverComponentsExternalPackages: ['@prisma/client'],
+    outputFileTracingRoot: monorepoRoot,
+    outputFileTracingIncludes: {
+      '/api/**/*': [
+        '../../node_modules/.prisma/client/**/*',
+        '../../node_modules/@prisma/client/**/*',
+        './node_modules/.prisma/client/**/*',
+        './node_modules/@prisma/client/**/*',
+        '../../packages/database/node_modules/.prisma/client/**/*',
+        '../../packages/database/prisma/**/*'
+      ]
+    }
+  },
   async rewrites() {
     const rawApiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
 
