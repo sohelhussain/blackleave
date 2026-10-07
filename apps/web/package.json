@@ -10,6 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@applyflow/database": "workspace:*",
     "@applyflow/types": "workspace:*",
     "@applyflow/ui": "workspace:*",
     "@applyflow/validators": "workspace:*",

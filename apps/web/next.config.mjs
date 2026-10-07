@@ -1,15 +1,42 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui'],
+  transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui', '@applyflow/database'],
   async rewrites() {
-    const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiUrl}/api/:path*`
-      }
-    ];
+    const rawApiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
+
+    // 1. If an external backend URL is configured (production or custom host),
+    // proxy all /api/* requests to that backend.
+    if (rawApiUrl && !rawApiUrl.includes('localhost')) {
+      const cleanUrl = rawApiUrl.replace(/\/$/, '');
+      return {
+        beforeFiles: [
+          {
+            source: '/api/:path*',
+            destination: `${cleanUrl}/api/:path*`
+          }
+        ]
+      };
+    }
+
+    // 2. In local development, if external API_URL is not set or set to localhost,
+    // proxy to the local Express backend on port 3001.
+    if (process.env.NODE_ENV === 'development') {
+      const devTarget = rawApiUrl ? rawApiUrl.replace(/\/$/, '') : 'http://localhost:3001';
+      return {
+        beforeFiles: [
+          {
+            source: '/api/:path*',
+            destination: `${devTarget}/api/:path*`
+          }
+        ]
+      };
+    }
+
+    // 3. In production on Vercel when API_URL is not provided:
+    // Do NOT rewrite to localhost:3001 (which triggers DNS_HOSTNAME_RESOLVED_PRIVATE 404).
+    // Instead, allow requests to be handled by the native Next.js API route handlers.
+    return [];
   }
 };
 

@@ -40,7 +40,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         credentials: 'include'
       });
 
-      if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.authenticated && data.user) {
           setUser(data.user);
@@ -51,7 +52,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Not authenticated or session expired
+      // Not authenticated, session expired, or non-JSON/404 response
       setUser(null);
       setProfile(null);
       setCompletion(null);
@@ -78,14 +79,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await fetch('/api/auth/google', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         credentials: 'include',
         body: JSON.stringify({ credential })
       });
 
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
+      if (!res.ok) {
+        let msg = `Authentication request failed (${res.status})`;
+        if (isJson) {
+          try {
+            const errData = await res.json();
+            msg = errData.error?.message || errData.message || msg;
+          } catch {
+            // Ignore parse failure on error body
+          }
+        } else {
+          const rawText = await res.text();
+          console.warn('[AuthContext] Non-JSON error response received:', rawText.slice(0, 120));
+        }
+        setError(msg);
+        setIsLoading(false);
+        return { success: false, error: msg };
+      }
+
+      if (!isJson) {
+        const rawText = await res.text();
+        console.warn('[AuthContext] Expected JSON but received:', rawText.slice(0, 120));
+        const msg = `Unexpected server response format (${res.status})`;
+        setError(msg);
+        setIsLoading(false);
+        return { success: false, error: msg };
+      }
+
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
+      if (!data.success) {
         const msg = data.error?.message || 'Google sign-in failed. Please try again.';
         setError(msg);
         setIsLoading(false);
@@ -114,6 +148,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       await fetch('/api/auth/logout', {
         method: 'POST',
+        headers: { 'Accept': 'application/json' },
         credentials: 'include'
       });
     } catch (err) {
@@ -131,20 +166,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await fetch('/api/profile', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         credentials: 'include',
         body: JSON.stringify(partial)
       });
 
-      if (!res.ok) {
-        throw new Error('Failed to save profile');
+      const contentType = res.headers.get('content-type') || '';
+      if (!res.ok || !contentType.includes('application/json')) {
+        throw new Error(`Failed to save profile (${res.status})`);
       }
 
       const data = await res.json();
-      const updatedProfile = data.data.profile;
-      setProfile(updatedProfile);
-      setCompletion(data.data.completion || calculateProfileCompleteness(updatedProfile));
-      return updatedProfile;
+      const updatedProfile = data.data?.profile || data.profile;
+      if (updatedProfile) {
+        setProfile(updatedProfile);
+        setCompletion(data.data?.completion || calculateProfileCompleteness(updatedProfile));
+        return updatedProfile;
+      }
+      return null;
     } catch (err: any) {
       console.error('[AuthContext] Error saving profile:', err);
       return null;

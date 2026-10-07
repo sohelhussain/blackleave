@@ -30,6 +30,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [localError, setLocalError] = useState<string | null>(null);
   const [gsiLoaded, setGsiLoaded] = useState<boolean>(false);
   const googleBtnRef = useRef<HTMLDivElement>(null);
+  const initializedRef = useRef<boolean>(false);
+  const callbackRef = useRef(onGoogleCredential);
+  callbackRef.current = onGoogleCredential;
 
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
@@ -62,18 +65,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   // Initialize Google Identity Services when script is ready and Client ID is available
   useEffect(() => {
     if (!gsiLoaded || !window.google?.accounts?.id || !clientId) return;
+    if (initializedRef.current) return;
 
     try {
       window.google.accounts.id.initialize({
         client_id: clientId,
         callback: async (response: { credential: string }) => {
           setLocalError(null);
-          const res = await onGoogleCredential(response.credential);
+          const res = await callbackRef.current(response.credential);
           if (!res.success) {
             setLocalError(res.error || 'Google sign-in failed. Please try again.');
           }
         }
       });
+      initializedRef.current = true;
 
       if (googleBtnRef.current) {
         googleBtnRef.current.innerHTML = '';
@@ -90,7 +95,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     } catch (err: any) {
       console.error('[LandingPage] Google One Tap initialization failed:', err);
     }
-  }, [gsiLoaded, clientId, onGoogleCredential]);
+  }, [gsiLoaded, clientId]);
 
   const handleManualGoogleClick = () => {
     setLocalError(null);

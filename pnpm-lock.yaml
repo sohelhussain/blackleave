@@ -124,6 +124,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@applyflow/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@applyflow/types':
         specifier: workspace:*
         version: link:../../packages/types
@@ -212,6 +215,9 @@ importers:
         specifier: ^5.15.0
         version: 5.22.0(prisma@5.22.0)
     devDependencies:
+      '@types/node':
+        specifier: ^20.14.9
+        version: 20.19.43
       prisma:
         specifier: ^5.15.0
         version: 5.22.0
