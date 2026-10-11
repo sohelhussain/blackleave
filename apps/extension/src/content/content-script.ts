@@ -1,12 +1,15 @@
-console.log("[ApplyFlow] Content script active:", location.href);
+console.log("[blackLeave] Content script active:", location.href);
 
 import { DetectedField, UserProfile, INITIAL_SOHEL_PROFILE } from '@applyflow/types';
-import { getAdapterForPage, setNativeValue, highlightAutofilledElement } from '@applyflow/autofill';
+import { getAdapterForPage, setNativeValue, highlightAutofilledElement, isExtensionUI } from '@applyflow/autofill';
 
 let detectedFields: DetectedField[] = [];
 let userProfile: UserProfile = INITIAL_SOHEL_PROFILE;
 let isDrawerOpen = false;
 let observer: MutationObserver | null = null;
+let isScanning = false;
+let isApplyingAutofill = false;
+let observerDebounceTimeout: any = null;
 
 // Initialize on page load
 async function init() {
@@ -23,117 +26,176 @@ async function init() {
   setupDynamicObserver();
 }
 
-function scanPage(): DetectedField[] {
-  const adapter = getAdapterForPage(window.location.href, document);
-  const rawControls = document.querySelectorAll(
-    'input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), textarea, select, [role="textbox"], [role="combobox"], [role="radio"], [role="checkbox"], [role="listbox"], [role="option"], [data-params]'
-  );
-  detectedFields = adapter.detectAndMap(document, userProfile);
-  console.log(`[ApplyFlow] Detected ATS: ${adapter.name}`);
-  console.log(`[ApplyFlow] Raw controls found: ${rawControls.length}`);
-  console.log(`[ApplyFlow] Application fields detected: ${detectedFields.length}`);
-  console.log(`[ApplyFlow] Mapped fields: ${detectedFields.filter(f => f.suggestedValue !== null).length}`);
-
-  if (detectedFields.length > 0) {
-    const jobInfo = adapter.extractJobInfo ? adapter.extractJobInfo(document) : null;
-    chrome.runtime.sendMessage({
-      type: 'FRAME_FIELDS_DETECTED',
-      fields: detectedFields,
-      jobInfo,
-      url: window.location.href,
-      isIframe: window !== window.top
-    }).catch(() => {});
+function mergeDetectedFields(existing: DetectedField[], fresh: DetectedField[]): DetectedField[] {
+  const existingMap = new Map<string, DetectedField>();
+  for (const f of existing) {
+    existingMap.set(f.id, f);
   }
 
-  return detectedFields;
+  return fresh.map((f) => {
+    const prev = existingMap.get(f.id);
+    if (prev) {
+      return {
+        ...f,
+        userValue: prev.userValue !== undefined ? prev.userValue : f.userValue,
+        approved: prev.approved !== undefined ? prev.approved : f.approved
+      };
+    }
+    return f;
+  });
+}
+
+function scanPage(): DetectedField[] {
+  if (isScanning) return detectedFields;
+  isScanning = true;
+  const startTime = Date.now();
+
+  try {
+    const adapter = getAdapterForPage(window.location.href, document);
+    const freshFields = adapter.detectAndMap(document, userProfile);
+
+    // Merge with existing fields to preserve user approvals/edits
+    detectedFields = mergeDetectedFields(detectedFields, freshFields);
+
+    const readyCount = detectedFields.filter(f => f.suggestedValue !== null && !f.requiresConfirmation).length;
+    const duration = Date.now() - startTime;
+
+    console.log(`[blackLeave] ATS: ${adapter.name} | Questions detected: ${detectedFields.length} | Ready: ${readyCount} | Duration: ${duration}ms`);
+
+    if (detectedFields.length > 0) {
+      const jobInfo = adapter.extractJobInfo ? adapter.extractJobInfo(document) : null;
+      chrome.runtime.sendMessage({
+        type: 'FRAME_FIELDS_DETECTED',
+        fields: detectedFields,
+        jobInfo,
+        url: window.location.href,
+        isIframe: window !== window.top
+      }).catch(() => {});
+    }
+
+    return detectedFields;
+  } finally {
+    isScanning = false;
+  }
 }
 
 function setupDynamicObserver() {
-  let debounceTimeout: NodeJS.Timeout | null = null;
-  observer = new MutationObserver(() => {
-    if (debounceTimeout) clearTimeout(debounceTimeout);
-    debounceTimeout = setTimeout(() => {
+  observer = new MutationObserver((mutations) => {
+    if (isApplyingAutofill) return;
+
+    // Reject mutations that originate entirely from blackLeave's extension UI
+    const hasExternalMutation = mutations.some((m) => {
+      const target = m.target as Element;
+      if (!target) return false;
+      if (isExtensionUI(target)) return false;
+      if (target.parentElement && isExtensionUI(target.parentElement)) return false;
+      return true;
+    });
+
+    if (!hasExternalMutation) return;
+
+    if (observerDebounceTimeout) clearTimeout(observerDebounceTimeout);
+    observerDebounceTimeout = setTimeout(() => {
+      if (isScanning || isApplyingAutofill) return;
       const updated = scanPage();
       if (isDrawerOpen) {
         renderDrawer(updated);
       }
-    }, 500);
+    }, 600);
   });
 
   observer.observe(document.body, {
     childList: true,
-    subtree: true
+    subtree: true,
+    attributes: false
   });
 }
 
 // Perform autofill on approved fields
 function executeAutofill(fieldsToFill: DetectedField[]): { filledCount: number } {
+  isApplyingAutofill = true;
   let filledCount = 0;
 
-  for (const field of fieldsToFill) {
-    const value = field.userValue !== undefined ? field.userValue : field.suggestedValue;
-    if (value === null || value === undefined || value === '') continue;
+  try {
+    for (const field of fieldsToFill) {
+      const value = field.userValue !== undefined ? field.userValue : field.suggestedValue;
+      if (value === null || value === undefined || value === '') continue;
 
-    let element = document.querySelector(field.selector) as
-      | HTMLInputElement
-      | HTMLTextAreaElement
-      | HTMLSelectElement
-      | null;
+      let element = document.querySelector(field.selector) as HTMLElement | null;
 
-    // If exact selector fails, try fallback by id or name
-    if (!element && field.htmlId) {
-      element = document.getElementById(field.htmlId) as any;
-    }
-    if (!element && field.name) {
-      element = document.querySelector(`[name="${CSS.escape(field.name)}"]`) as any;
-    }
+      // If exact selector fails, try fallback by id or name
+      if (!element && field.htmlId) {
+        element = document.getElementById(field.htmlId);
+      }
+      if (!element && field.name) {
+        element = document.querySelector(`[name="${CSS.escape(field.name)}"]`) as HTMLElement;
+      }
 
-    // Semantic Google Forms fallback: find question item container by title heading
-    if (!element && field.detectedLabel) {
-      const headings = Array.from(document.querySelectorAll('[role="heading"], .M7eMe, .freebirdFormviewerComponentsQuestionBaseTitle, legend'));
-      for (const h of headings) {
-        const hClean = (h.textContent || '').replace(/[*:]/g, '').trim().toLowerCase();
-        const fClean = (field.detectedLabel || '').replace(/[*:]/g, '').trim().toLowerCase();
-        if (hClean === fClean || (hClean.length > 3 && fClean.includes(hClean)) || (fClean.length > 3 && hClean.includes(fClean))) {
-          const qContainer = h.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
-          if (qContainer) {
-            const control = qContainer.querySelector('[role="radiogroup"], [role="radio"], input, textarea, select');
-            if (control) {
-              element = control as any;
-              break;
+      // Semantic Google Forms fallback: find question item container by title heading
+      if (!element && field.detectedLabel) {
+        const headings = Array.from(document.querySelectorAll('[role="heading"], .M7eMe, .freebirdFormviewerComponentsQuestionBaseTitle, legend'));
+        for (const h of headings) {
+          const hClean = (h.textContent || '').replace(/[*:]/g, '').trim().toLowerCase();
+          const fClean = (field.detectedLabel || '').replace(/[*:]/g, '').trim().toLowerCase();
+          if (hClean === fClean || (hClean.length > 3 && fClean.includes(hClean)) || (fClean.length > 3 && hClean.includes(fClean))) {
+            const qContainer = h.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
+            if (qContainer) {
+              const control = qContainer.querySelector('[role="radiogroup"], [role="radio"], input, textarea, select');
+              if (control) {
+                element = control as HTMLElement;
+                break;
+              }
             }
           }
         }
       }
-    }
 
-    if (element) {
-      const success = setNativeValue(element, value);
-      if (success) {
-        highlightAutofilledElement(element, field.confidenceLevel);
-        filledCount++;
+      if (element) {
+        if (isExtensionUI(element) || !element.isConnected) continue;
+
+        const success = setNativeValue(element, value);
+        if (success) {
+          highlightAutofilledElement(element, field.confidenceLevel);
+          filledCount++;
+        }
       }
     }
-  }
 
-  console.log(`[ApplyFlow Content] Autofilled ${filledCount} fields. Form was NOT submitted.`);
-  return { filledCount };
+    console.log(`[blackLeave Content] Autofilled ${filledCount} fields. Form was NOT submitted.`);
+    return { filledCount };
+  } finally {
+    isApplyingAutofill = false;
+  }
 }
 
 // Render in-page review drawer
 function renderDrawer(fields: DetectedField[]) {
-  let drawer = document.getElementById('applyflow-drawer-host');
+  let drawer = document.getElementById('blackleave-drawer-host');
+  if (!drawer) {
+    drawer = document.getElementById('applyflow-drawer-host');
+  }
   if (!drawer) {
     drawer = document.createElement('div');
-    drawer.id = 'applyflow-drawer-host';
+    drawer.id = 'blackleave-drawer-host';
+    drawer.setAttribute('data-blackleave-root', 'true');
+    drawer.style.position = 'fixed';
+    drawer.style.top = '0';
+    drawer.style.right = '0';
+    drawer.style.width = '420px';
+    drawer.style.height = '100vh';
+    drawer.style.zIndex = '2147483646';
+    drawer.style.boxShadow = '-4px 0 24px rgba(0,0,0,0.15)';
+    drawer.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
     document.body.appendChild(drawer);
+  } else {
+    drawer.setAttribute('data-blackleave-root', 'true');
   }
 
   const readyCount = fields.filter((f) => f.confidenceLevel === 'HIGH' && f.suggestedValue !== null && !f.requiresConfirmation).length;
   const reviewCount = fields.filter((f) => f.confidenceLevel !== 'HIGH' || f.requiresConfirmation || f.suggestedValue === null).length;
 
   const html = `
-    <div style="display:flex; flex-direction:column; height:100%; font-size:14px; background:#f8fafc;">
+    <div data-blackleave-root="true" style="display:flex; flex-direction:column; height:100%; font-size:14px; background:#f8fafc; border-left:1px solid #e2e8f0;">
       <!-- Header -->
       <div style="padding:16px 20px; background:#0f172a; color:#ffffff; display:flex; align-items:center; justify-content:space-between;">
         <div style="display:flex; align-items:center; gap:8px;">
@@ -143,7 +205,7 @@ function renderDrawer(fields: DetectedField[]) {
           <span style="font-weight:700; font-size:16px; letter-spacing:-0.3px;">blackLeave</span>
           <span style="font-size:11px; background:#334155; padding:2px 6px; border-radius:4px;">Review Mode</span>
         </div>
-        <button id="applyflow-close-drawer" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:20px; line-height:1;">&times;</button>
+        <button id="blackleave-close-drawer" style="background:transparent; border:none; color:#94a3b8; cursor:pointer; font-size:20px; line-height:1;">&times;</button>
       </div>
 
       <!-- Overview Stats -->
@@ -174,7 +236,7 @@ function renderDrawer(fields: DetectedField[]) {
 
       <!-- Action Footer -->
       <div style="padding:16px 20px; background:#ffffff; border-top:1px solid #e2e8f0; display:flex; flex-direction:column; gap:8px;">
-        <button id="applyflow-fill-all-btn" style="width:100%; padding:10px; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+        <button id="blackleave-fill-all-btn" style="width:100%; padding:10px; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
           ✓ Fill Approved Fields (${fields.filter((f) => f.approved !== false && (f.suggestedValue !== null || f.userValue)).length})
         </button>
         <div style="font-size:11px; color:#94a3b8; text-align:center;">
@@ -194,7 +256,11 @@ function renderFieldItem(f: DetectedField, i: number): string {
   const isHigh = f.confidenceLevel === 'HIGH' && !f.requiresConfirmation && !isMissing;
   const isMed = !isHigh && !isMissing;
 
-  const badgeClass = isHigh ? 'applyflow-badge-green' : isMed ? 'applyflow-badge-yellow' : 'applyflow-badge-red';
+  const badgeStyle = isHigh
+    ? 'background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;'
+    : isMed
+    ? 'background:#fffbeb; color:#92400e; border:1px solid #fde68a;'
+    : 'background:#fef2f2; color:#991b1b; border:1px solid #fecaca;';
   const badgeLabel = isHigh ? '✓ Verified' : isMed ? '⚠ Needs Review' : '! Missing Information';
   const displayVal = f.userValue !== undefined ? f.userValue : f.suggestedValue || '';
 
@@ -214,12 +280,12 @@ function renderFieldItem(f: DetectedField, i: number): string {
     f.category === 'DEMOGRAPHIC' ? 'Demographics' : 'Unrecognized/open-ended field';
 
   return `
-    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+    <div data-blackleave-root="true" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
         <label style="font-weight:600; font-size:13px; color:#1e293b; max-width:240px; word-break:break-word;">
           ${f.detectedLabel} ${f.isRequired ? '<span style="color:#ef4444;">*</span>' : ''}
         </label>
-        <span class="${badgeClass}" style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px; white-space:nowrap;">
+        <span style="font-size:11px; font-weight:600; padding:2px 8px; border-radius:12px; white-space:nowrap; ${badgeStyle}">
           ${badgeLabel}
         </span>
       </div>
@@ -249,7 +315,7 @@ function renderFieldItem(f: DetectedField, i: number): string {
               const textCol = isSelected ? '#ffffff' : '#334155';
               const border = isSelected ? '#0284c7' : '#cbd5e1';
               return `
-                <button type="button" class="applyflow-option-chip" data-field-index="${i}" data-opt-label="${opt.label}" data-opt-value="${opt.value}" style="cursor:pointer; font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid ${border}; background:${bg}; color:${textCol}; font-weight:${isSelected ? '600' : '400'}; transition:all 0.15s ease;">
+                <button type="button" class="blackleave-option-chip" data-field-index="${i}" data-opt-label="${opt.label}" data-opt-value="${opt.value}" style="cursor:pointer; font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid ${border}; background:${bg}; color:${textCol}; font-weight:${isSelected ? '600' : '400'}; transition:all 0.15s ease;">
                   ${isSelected ? '● ' : '○ '}${opt.label}
                 </button>
               `;
@@ -260,23 +326,23 @@ function renderFieldItem(f: DetectedField, i: number): string {
 
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${f.fieldType === 'textarea' ? `
-          <textarea data-field-index="${i}" class="applyflow-input-val" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; min-height:64px; box-sizing:border-box;">${displayVal}</textarea>
+          <textarea data-field-index="${i}" class="blackleave-input-val" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; min-height:64px; box-sizing:border-box;">${displayVal}</textarea>
         ` : `
-          <input type="${f.fieldType === 'radio' || f.fieldType === 'checkbox' ? 'text' : f.fieldType}" data-field-index="${i}" class="applyflow-input-val" value="${displayVal}" placeholder="${f.options ? 'Select choice above or enter custom...' : 'Enter value...'}" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; box-sizing:border-box;" />
+          <input type="${f.fieldType === 'radio' || f.fieldType === 'checkbox' ? 'text' : f.fieldType}" data-field-index="${i}" class="blackleave-input-val" value="${displayVal}" placeholder="${f.options ? 'Select choice above or enter custom...' : 'Enter value...'}" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; box-sizing:border-box;" />
         `}
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
           <div style="display:flex; align-items:center; gap:8px;">
             <label style="font-size:11px; color:#475569; display:flex; align-items:center; gap:4px; cursor:pointer;">
-              <input type="checkbox" data-field-index="${i}" class="applyflow-approve-check" ${f.approved !== false && (displayVal !== '') ? 'checked' : ''} />
+              <input type="checkbox" data-field-index="${i}" class="blackleave-approve-check" ${f.approved !== false && (displayVal !== '') ? 'checked' : ''} />
               Approve
             </label>
-            <button data-field-index="${i}" class="applyflow-skip-btn" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer; text-decoration:underline; padding:0;">
+            <button data-field-index="${i}" class="blackleave-skip-btn" style="background:transparent; border:none; color:#94a3b8; font-size:11px; cursor:pointer; text-decoration:underline; padding:0;">
               Reject/Skip
             </button>
           </div>
           ${!isHigh && f.category !== 'DEMOGRAPHIC' ? `
-            <button data-field-index="${i}" class="applyflow-regen-btn" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:2px 8px; border-radius:4px; font-size:11px; cursor:pointer; color:#334155;">
+            <button data-field-index="${i}" class="blackleave-regen-btn" style="background:#f1f5f9; border:1px solid #cbd5e1; padding:2px 8px; border-radius:4px; font-size:11px; cursor:pointer; color:#334155;">
               ✨ Ask Gemini
             </button>
           ` : ''}
@@ -288,7 +354,7 @@ function renderFieldItem(f: DetectedField, i: number): string {
 
 function attachDrawerListeners(fields: DetectedField[]) {
   // Option chip selection
-  document.querySelectorAll('.applyflow-option-chip').forEach((chip) => {
+  document.querySelectorAll('.blackleave-option-chip').forEach((chip) => {
     chip.addEventListener('click', (e) => {
       const btn = e.currentTarget as HTMLElement;
       const idx = parseInt(btn.getAttribute('data-field-index') || '0', 10);
@@ -299,15 +365,17 @@ function attachDrawerListeners(fields: DetectedField[]) {
       renderDrawer(fields);
     });
   });
+
   // Close drawer
-  document.getElementById('applyflow-close-drawer')?.addEventListener('click', () => {
-    const drawer = document.getElementById('applyflow-drawer-host');
+  const closeBtn = document.getElementById('blackleave-close-drawer') || document.getElementById('applyflow-close-drawer');
+  closeBtn?.addEventListener('click', () => {
+    const drawer = document.getElementById('blackleave-drawer-host') || document.getElementById('applyflow-drawer-host');
     if (drawer) drawer.remove();
     isDrawerOpen = false;
   });
 
   // Value change
-  document.querySelectorAll('.applyflow-input-val').forEach((input) => {
+  document.querySelectorAll('.blackleave-input-val').forEach((input) => {
     input.addEventListener('input', (e) => {
       const idx = parseInt((e.target as HTMLElement).getAttribute('data-field-index') || '0', 10);
       const val = (e.target as HTMLInputElement).value;
@@ -318,7 +386,7 @@ function attachDrawerListeners(fields: DetectedField[]) {
   });
 
   // Approval checkbox
-  document.querySelectorAll('.applyflow-approve-check').forEach((chk) => {
+  document.querySelectorAll('.blackleave-approve-check').forEach((chk) => {
     chk.addEventListener('change', (e) => {
       const idx = parseInt((e.target as HTMLElement).getAttribute('data-field-index') || '0', 10);
       fields[idx].approved = (e.target as HTMLInputElement).checked;
@@ -326,7 +394,7 @@ function attachDrawerListeners(fields: DetectedField[]) {
   });
 
   // Skip / Reject button
-  document.querySelectorAll('.applyflow-skip-btn').forEach((btn) => {
+  document.querySelectorAll('.blackleave-skip-btn').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       const idx = parseInt((e.target as HTMLElement).getAttribute('data-field-index') || '0', 10);
       fields[idx].approved = false;
@@ -335,7 +403,7 @@ function attachDrawerListeners(fields: DetectedField[]) {
   });
 
   // Regenerate with Gemini
-  document.querySelectorAll('.applyflow-regen-btn').forEach((btn) => {
+  document.querySelectorAll('.blackleave-regen-btn').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       const idx = parseInt((e.target as HTMLElement).getAttribute('data-field-index') || '0', 10);
       const field = fields[idx];
@@ -369,19 +437,19 @@ function attachDrawerListeners(fields: DetectedField[]) {
           renderDrawer(fields);
         }
       } catch (err) {
-        console.error('[ApplyFlow] AI regeneration failed:', err);
+        console.error('[blackLeave] AI regeneration failed:', err);
         (e.target as HTMLElement).textContent = '❌ Failed';
       }
     });
   });
 
   // Fill all approved fields button
-  document.getElementById('applyflow-fill-all-btn')?.addEventListener('click', () => {
+  const fillAllBtn = document.getElementById('blackleave-fill-all-btn') || document.getElementById('applyflow-fill-all-btn');
+  fillAllBtn?.addEventListener('click', () => {
     const approvedFields = fields.filter((f) => f.approved !== false && (f.userValue || f.suggestedValue));
     const result = executeAutofill(approvedFields);
 
-    // Close drawer and notify
-    const drawer = document.getElementById('applyflow-drawer-host');
+    const drawer = document.getElementById('blackleave-drawer-host') || document.getElementById('applyflow-drawer-host');
     if (drawer) drawer.remove();
     isDrawerOpen = false;
 
@@ -406,6 +474,7 @@ function attachDrawerListeners(fields: DetectedField[]) {
 
 function showFeedbackBanner(msg: string) {
   const banner = document.createElement('div');
+  banner.setAttribute('data-blackleave-root', 'true');
   banner.style.position = 'fixed';
   banner.style.bottom = '24px';
   banner.style.right = '24px';

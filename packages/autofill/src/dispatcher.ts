@@ -1,4 +1,17 @@
 import { normalizeOptionText } from './mapper.js';
+import { isExtensionUI } from './detector.js';
+
+function dispatchBlurEvent(element: HTMLElement): void {
+  try {
+    if (typeof FocusEvent !== 'undefined') {
+      element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      return;
+    }
+  } catch {
+    // fallback
+  }
+  element.dispatchEvent(new Event('blur', { bubbles: true }));
+}
 
 /**
  * Dispatches values to DOM elements in a way that is compatible with React, Vue,
@@ -10,6 +23,8 @@ export function setNativeValue(
   value: string | boolean
 ): boolean {
   if (!element) return false;
+  if (element.isConnected === false) return false;
+  if (isExtensionUI(element)) return false;
 
   try {
     const role = typeof element.getAttribute === 'function' ? element.getAttribute('role')?.toLowerCase() : undefined;
@@ -79,7 +94,7 @@ export function setNativeValue(
 
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-      element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      dispatchBlurEvent(element);
       return true;
     }
 
@@ -107,7 +122,7 @@ export function setNativeValue(
 
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-      element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      dispatchBlurEvent(element);
       return true;
     }
 
@@ -124,7 +139,7 @@ export function setNativeValue(
       element.textContent = stringValue;
       element.dispatchEvent(new Event('input', { bubbles: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
-      element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      dispatchBlurEvent(element);
       return true;
     }
 
@@ -147,7 +162,7 @@ export function setNativeValue(
         element.selectedIndex = matchedIndex;
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.dispatchEvent(new Event('input', { bubbles: true }));
-        element.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+        dispatchBlurEvent(element);
         return true;
       }
     }
@@ -327,6 +342,18 @@ export function selectRadioOption(
     return false;
   }
 
+  if (targetRadio.isConnected === false) {
+    return false;
+  }
+
+  // Idempotency: If already selected, do not re-dispatch
+  const isAlreadyChecked =
+    targetRadio.getAttribute('aria-checked') === 'true' ||
+    (targetRadio instanceof HTMLInputElement && targetRadio.checked === true);
+  if (isAlreadyChecked) {
+    return true;
+  }
+
   // Verify targetRadio belongs to the intended container
   if (container && container !== targetRadio && typeof container.contains === 'function' && !container.contains(targetRadio)) {
     return false;
@@ -375,7 +402,7 @@ export function selectRadioOption(
 
     targetRadio.dispatchEvent(new Event('input', { bubbles: true }));
     targetRadio.dispatchEvent(new Event('change', { bubbles: true }));
-    targetRadio.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    dispatchBlurEvent(targetRadio);
 
     // Verification step
     const isChecked =

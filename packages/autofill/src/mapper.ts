@@ -580,7 +580,7 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
   // 1. Availability for six months of office work / Onsite commitment
   // Per requirements: Never auto-assume or high-confidence answer without explicit candidate preference.
   if (
-    /\b(?:availability\s*for\s*(?:six|6)\s*months(?:\s*of\s*office\s*work)?|available\s*for\s*(?:six|6)\s*months(?:\s*(?:of\s*)?(?:office\s*work|internship|work))?|willing\s*to\s*work\s*from\s*(?:the\s*)?office\s*for\s*(?:six|6)\s*months|six\s*months\s*(?:of\s*)?office\s*work|6\s*months\s*(?:of\s*)?office\s*work|six\s*months\s*in-office|6\s*months\s*in-office)\b/i.test(combinedContext)
+    /\b(?:availability\s*for\s*(?:six|6)\s*months(?:\s*of\s*(?:office|onsite|in-office)\s*work)?|available\s*for\s*(?:six|6)\s*months(?:\s*(?:of\s*)?(?:office|onsite|in-office|internship|work))?|willing\s*to\s*work\s*(?:from\s*(?:the\s*)?office|onsite)\s*for\s*(?:six|6)\s*months|(?:six|6)\s*months\s*(?:of\s*)?(?:office|onsite|in-office)\s*work|(?:six|6)\s*months\s*(?:in-office|onsite)|(?:six|6)\s*months\s*commitment)\b/i.test(combinedContext)
   ) {
     return {
       ...field,
@@ -593,13 +593,13 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
       userValue: undefined,
       requiresConfirmation: true,
       approved: false,
-      explanation: 'Requires candidate review and approval for 6-month in-office commitment.'
+      explanation: 'Requires candidate review and approval for 6-month in-office / onsite commitment.'
     };
   }
 
   // 2. Comfort with the job location / Relocation preference
   if (
-    /\b(?:comfort\s*with\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*(?:with|working\s*in)\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*with\s*(?:this|the)\s*location)\b/i.test(combinedContext)
+    /\b(?:comfort\s*with\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*(?:with|working\s*in)\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*with\s*(?:this|the)\s*location|location\s*preference|relocation\s*preference)\b/i.test(combinedContext)
   ) {
     const isWilling = profile.jobPreferences?.willingToRelocate ?? true;
     let val: string | boolean = isWilling ? 'Yes' : 'No';

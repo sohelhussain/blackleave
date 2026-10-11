@@ -12,7 +12,16 @@ chrome.runtime.onInstalled.addListener(async () => {
   }
 });
 
-const tabFieldsCache = new Map<number, { frameId?: number; fields: any[]; jobInfo?: any; url?: string }>();
+interface FrameData {
+  frameId: number;
+  fields: any[];
+  jobInfo?: any;
+  url?: string;
+  isIframe: boolean;
+  updatedAt: number;
+}
+
+const tabFramesMap = new Map<number, Map<number, FrameData>>();
 
 // Ephemeral message handler with async response channel
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -21,11 +30,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       switch (message.type) {
         case 'FRAME_FIELDS_DETECTED': {
           if (sender.tab?.id) {
-            tabFieldsCache.set(sender.tab.id, {
-              frameId: sender.frameId,
+            const tabId = sender.tab.id;
+            const frameId = sender.frameId || 0;
+            if (!tabFramesMap.has(tabId)) {
+              tabFramesMap.set(tabId, new Map());
+            }
+            tabFramesMap.get(tabId)!.set(frameId, {
+              frameId,
               fields: message.fields,
               jobInfo: message.jobInfo,
-              url: message.url
+              url: message.url,
+              isIframe: Boolean(message.isIframe),
+              updatedAt: Date.now()
             });
           }
           sendResponse({ success: true });
@@ -34,12 +50,29 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case 'GET_TAB_FIELDS': {
           const tabId = message.tabId;
-          const cached = tabFieldsCache.get(tabId);
+          const frames = tabFramesMap.get(tabId);
+          if (!frames || frames.size === 0) {
+            sendResponse({ success: true, fields: [], jobInfo: null, frameId: undefined });
+            break;
+          }
+
+          // Prefer frame with detected fields (top frame first, or frame with most fields)
+          let bestFrame: FrameData | null = null;
+          for (const [, frame] of frames) {
+            if (!bestFrame) {
+              bestFrame = frame;
+            } else if (frame.fields.length > bestFrame.fields.length) {
+              bestFrame = frame;
+            } else if (frame.frameId === 0 && frame.fields.length > 0) {
+              bestFrame = frame;
+            }
+          }
+
           sendResponse({
             success: true,
-            fields: cached?.fields || [],
-            jobInfo: cached?.jobInfo || null,
-            frameId: cached?.frameId
+            fields: bestFrame?.fields || [],
+            jobInfo: bestFrame?.jobInfo || null,
+            frameId: bestFrame?.frameId
           });
           break;
         }
