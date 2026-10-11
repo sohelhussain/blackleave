@@ -41,15 +41,53 @@ export function detectFormFields(root: Document | ShadowRoot | Element = documen
 
     const htmlEl = el as HTMLElement;
     const role = htmlEl.getAttribute('role')?.toLowerCase();
+    const tagName = htmlEl.tagName.toLowerCase();
+    const isRadio = role === 'radio' || (tagName === 'input' && (htmlEl as HTMLInputElement).type === 'radio');
 
-    // If this is a radiogroup, process it and mark all its child radios as processed
+    // Skip helper "Other response" text inputs that belong to a radio/checkbox question
+    if (
+      (htmlEl.getAttribute('aria-label')?.toLowerCase().includes('other response') ||
+        htmlEl.classList.contains('Hvn9fb')) &&
+      htmlEl.closest('[role="radiogroup"], [role="listitem"], .Qr7Oae')
+    ) {
+      continue;
+    }
+
+    // If this is an explicit radiogroup
     if (role === 'radiogroup') {
       const childRadios = htmlEl.querySelectorAll('[role="radio"], input[type="radio"]');
       childRadios.forEach((r) => processedElements.add(r));
-    } else if (role === 'radio') {
-      // If parent is a radiogroup already in elements, skip individual radio
+
+      // Also mark helper inputs (like "Other" response text input) within this radiogroup or question container
+      const qContainer = htmlEl.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
+      const helperInputs = (qContainer || htmlEl).querySelectorAll('input[aria-label*="Other" i], .Hvn9fb');
+      helperInputs.forEach((inp) => processedElements.add(inp));
+    } else if (isRadio) {
+      // If parent is a radiogroup, skip individual radio
       if (htmlEl.closest('[role="radiogroup"]')) {
         continue;
+      }
+
+      // Check if radio is inside a semantic question container with other radios
+      const questionContainer = htmlEl.closest(
+        '[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset'
+      );
+      if (questionContainer) {
+        const siblingRadios = Array.from(questionContainer.querySelectorAll('[role="radio"], input[type="radio"]'));
+        if (siblingRadios.length > 1) {
+          // Group as a single logical field!
+          siblingRadios.forEach((r) => processedElements.add(r));
+          const helperInputs = questionContainer.querySelectorAll('input[aria-label*="Other" i], .Hvn9fb');
+          helperInputs.forEach((inp) => processedElements.add(inp));
+
+          const detected = analyzeElement(questionContainer as HTMLElement, index++, true);
+          if (detected) {
+            processedElements.add(el);
+            processedElements.add(questionContainer);
+            fields.push(detected);
+          }
+          continue;
+        }
       }
     }
 
@@ -105,18 +143,21 @@ function isVisible(el: Element): boolean {
 
 function analyzeElement(
   el: HTMLElement,
-  index: number
+  index: number,
+  isGroupContainer = false
 ): DetectedField | null {
   const tagName = el.tagName.toLowerCase();
   const role = el.getAttribute('role')?.toLowerCase();
   let fieldType: DetectedField['fieldType'] = 'text';
 
-  if (tagName === 'textarea') {
+  const hasRadios = isGroupContainer || role === 'radiogroup' || role === 'radio' || (tagName === 'input' && (el as HTMLInputElement).type === 'radio');
+
+  if (hasRadios) {
+    fieldType = 'radio';
+  } else if (tagName === 'textarea') {
     fieldType = 'textarea';
   } else if (tagName === 'select' || role === 'combobox' || role === 'listbox') {
     fieldType = 'select';
-  } else if (role === 'radiogroup' || role === 'radio') {
-    fieldType = 'radio';
   } else if (role === 'checkbox') {
     fieldType = 'checkbox';
   } else if (role === 'textbox' || el.classList.contains('quantumWizTextinputPaperinputInput')) {
@@ -161,18 +202,8 @@ function analyzeElement(
       label: opt.text.trim(),
       value: opt.value.trim()
     }));
-  } else if (role === 'radiogroup') {
-    const radioItems = Array.from(el.querySelectorAll('[role="radio"], input[type="radio"]'));
-    options = radioItems.map((r) => {
-      const val =
-        r.getAttribute('data-value') ||
-        (r as HTMLInputElement).value ||
-        r.getAttribute('aria-label') ||
-        r.textContent?.trim() ||
-        '';
-      const lbl = r.getAttribute('aria-label') || r.textContent?.trim() || val;
-      return { label: cleanText(lbl), value: cleanText(val) };
-    }).filter((o) => o.label.length > 0);
+  } else if (hasRadios) {
+    options = extractRadioOptions(el);
   } else if (role === 'listbox' || role === 'combobox') {
     const optItems = Array.from(el.querySelectorAll('[role="option"], [role="menuitem"]'));
     options = optItems.map((o) => {
@@ -205,15 +236,124 @@ function analyzeElement(
   };
 }
 
+/**
+ * Extracts all options from a radio container or question container, inspecting aria-label,
+ * aria-labelledby, sibling text spans, and surrounding label text.
+ */
+export function extractRadioOptions(
+  container: HTMLElement
+): Array<{ label: string; value: string }> {
+  const radioItems = Array.from(container.querySelectorAll('[role="radio"], input[type="radio"]'));
+  // If container itself is a single radio
+  if (
+    radioItems.length === 0 &&
+    (container.getAttribute('role') === 'radio' || (container as HTMLInputElement).type === 'radio')
+  ) {
+    radioItems.push(container);
+  }
+
+  const doc = container.ownerDocument || (typeof document !== 'undefined' ? document : null);
+  const options: Array<{ label: string; value: string }> = [];
+
+  for (const r of radioItems) {
+    let lbl = '';
+    let val = '';
+
+    // 1. Check aria-label directly on the radio
+    const ariaLabel = r.getAttribute('aria-label');
+    if (ariaLabel && !/^(?:other response|your answer)$/i.test(ariaLabel.trim())) {
+      lbl = ariaLabel.trim();
+    }
+
+    // 2. Check aria-labelledby on radio
+    if (!lbl) {
+      const labelledBy = r.getAttribute('aria-labelledby');
+      if (labelledBy && doc) {
+        const ids = labelledBy.split(/\s+/);
+        const parts = ids
+          .map((id) => {
+            const target = typeof doc.getElementById === 'function'
+              ? doc.getElementById(id)
+              : typeof doc.querySelector === 'function'
+              ? doc.querySelector(`#${escapeCSS(id)}`)
+              : null;
+            if (!target) return '';
+            const clone = target.cloneNode(true) as HTMLElement;
+            clone.querySelectorAll('input, select, textarea, button, script, style').forEach((c) => c.remove());
+            return cleanText(clone.textContent || '');
+          })
+          .filter((t) => t.length > 0 && !/^(?:your answer|required question|\*)$/i.test(t));
+        if (parts.length > 0) {
+          lbl = parts.join(' ');
+        }
+      }
+    }
+
+    // 3. Check option wrapper container (Google Forms uses .nWQGrd, .docssharedWizToggleLabeledContainer, etc.)
+    if (!lbl) {
+      const optContainer = r.closest('label, .docssharedWizToggleLabeledContainer, .nWQGrd, [role="listitem"]');
+      if (optContainer) {
+        // Try known Google Forms label spans
+        const spanLabel = optContainer.querySelector(
+          '.aDTYNe, .snByac, .N5DuFa, .docssharedWizToggleLabeledLabelText, [dir="auto"]'
+        );
+        if (spanLabel && spanLabel !== r && spanLabel.textContent?.trim()) {
+          lbl = cleanText(spanLabel.textContent);
+        } else {
+          const clone = optContainer.cloneNode(true) as HTMLElement;
+          clone.querySelectorAll('[role="radio"], input, button, script, style').forEach((c) => c.remove());
+          const text = cleanText(clone.textContent || '');
+          if (text) {
+            lbl = text;
+          }
+        }
+      }
+    }
+
+    // 4. Sibling elements
+    if (!lbl && r.parentElement) {
+      const sibling = r.parentElement.querySelector('span, label, div:not([role="radio"])');
+      if (sibling && sibling !== r && sibling.textContent?.trim()) {
+        lbl = cleanText(sibling.textContent);
+      }
+    }
+
+    // 5. data-value, value, textContent
+    if (!lbl) {
+      lbl = cleanText(r.getAttribute('data-value') || (r as HTMLInputElement).value || r.textContent || '');
+    }
+
+    val = r.getAttribute('data-value') || (r as HTMLInputElement).value || lbl;
+
+    // Normalize "Other:" to "Other"
+    let cleanLbl = cleanText(lbl);
+    if (/^other\s*:/i.test(cleanLbl)) {
+      cleanLbl = 'Other';
+    }
+
+    let cleanVal = cleanText(val);
+    if (/^other\s*:/i.test(cleanVal)) {
+      cleanVal = 'Other';
+    }
+
+    if (cleanLbl.length > 0) {
+      options.push({ label: cleanLbl, value: cleanVal || cleanLbl });
+    }
+  }
+
+  return options;
+}
+
 export function resolveLabel(el: HTMLElement): string {
   // 1. Google Forms / ATS question item container
-  // Google Forms wraps each question in [role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], [jsmodel]
-  const questionItem = el.closest(
-    '[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], [role="radiogroup"]'
-  );
+  // For radiogroups/groups, inspect the ancestor question container so we don't stop at the radiogroup itself
+  const questionItem = (el.getAttribute('role') === 'radiogroup' || el.getAttribute('role') === 'group')
+    ? (el.parentElement?.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset') || el)
+    : el.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
+
   if (questionItem) {
     const headingEl = questionItem.querySelector(
-      '[role="heading"], .freebirdFormviewerComponentsQuestionBaseTitle, .M7eMe, [data-params], h2, h3, h4'
+      '[role="heading"], .freebirdFormviewerComponentsQuestionBaseTitle, .M7eMe, [data-params], h1, h2, h3, h4, legend'
     );
     if (headingEl && headingEl !== el && headingEl.textContent?.trim()) {
       const headingClone = headingEl.cloneNode(true) as HTMLElement;

@@ -19,17 +19,193 @@ export const FIELD_ALIASES: Record<string, string[]> = {
   linkedin: ['linkedin', 'linkedin url', 'linkedin profile', 'linkedin link'],
   github: ['github', 'github url', 'github profile', 'github link'],
   portfolio: ['portfolio', 'portfolio url', 'personal website', 'website', 'personal url', 'portfolio link'],
-  degree: ['degree', 'highest degree', 'highest education', 'degree level', 'education level'],
+  degree: ['degree', 'highest degree', 'highest education', 'degree level', 'education level', 'course name'],
   branch: ['major', 'branch', 'field of study', 'discipline', 'area of study'],
   university: ['university', 'school', 'college', 'institution', 'university name', 'college name'],
-  graduationYear: ['graduation year', 'expected graduation', 'completion year', 'end year'],
+  graduationYear: ['graduation year', 'expected graduation', 'completion year', 'end year', 'year of graduation'],
   cgpa: ['cgpa', 'gpa', 'grade point average'],
   noticePeriod: ['notice period', 'availability', 'available to start', 'how soon can you start'],
-  willingToRelocate: ['willing to relocate', 'open to relocation', 'relocation'],
+  willingToRelocate: ['willing to relocate', 'open to relocation', 'relocation', 'comfort with the job location'],
   usAuthorized: ['authorized to work in the united states', 'legally authorized to work in us', 'us work authorization', 'eligible to work in us'],
   usSponsorshipRequired: ['require visa sponsorship', 'need sponsorship', 'will you require sponsorship', 'visa sponsorship'],
   indiaAuthorized: ['authorized to work in india', 'work authorization india', 'eligible to work in india']
 };
+
+/**
+ * Normalizes option text handling case, unicode dashes, slashes, punctuation,
+ * and collapsing whitespace.
+ */
+export function normalizeOptionText(text: string): string {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, '-') // Unicode hyphens/en-dash/em-dash to '-'
+    .replace(/\s*-\s*/g, '-') // collapse spaces around hyphens e.g. "8 - 8.99" -> "8-8.99"
+    .replace(/\s*\/\s*/g, '/') // collapse spaces around slashes e.g. "BE / B.Tech" -> "be/b.tech"
+    .replace(/[:*.]/g, '') // strip colons, asterisks, dots
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Matches candidate's verified degree against multiple-choice options.
+ * Returns null if no option matches (never assumes BE/B.Tech, MBA or Other).
+ */
+export function matchCandidateDegreeToOption(
+  options: Array<{ label: string; value: string }>,
+  profile: UserProfile
+): { label: string; value: string } | null {
+  const candidateDegrees = (profile.education || []).map((e) => `${e.degree} ${e.branch || ''}`.trim());
+  if (candidateDegrees.length === 0) return null;
+
+  for (const deg of candidateDegrees) {
+    const normDeg = normalizeOptionText(deg);
+
+    for (const opt of options) {
+      const normOpt = normalizeOptionText(opt.label);
+      if (normOpt === 'other') continue; // Never auto-match "Other"
+
+      // 1. BE / B.Tech (excluding dual degree or MBA)
+      if (
+        (normOpt.includes('btech') || normOpt.includes('be') || normOpt.includes('bachelor of technology') || normOpt.includes('bachelor of engineering')) &&
+        !normOpt.includes('mba')
+      ) {
+        if (/b\.?tech|b\.?e\b|bachelor\s*of\s*(?:engineering|technology)/i.test(deg) && !/b\.?pharma/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 2. MBA (excluding dual degree)
+      if (normOpt.includes('mba') && !normOpt.includes('btech') && !normOpt.includes('be')) {
+        if (/\bmba\b|master\s*of\s*business\s*administration/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 3. BE/B.Tech + MBA (Dual degree)
+      if (
+        (normOpt.includes('btech') || normOpt.includes('be')) &&
+        normOpt.includes('mba')
+      ) {
+        if (/(?:b\.?tech|be).*?(?:mba)|dual\s*degree/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 4. MCA
+      if (normOpt.includes('mca') || normOpt.includes('master of computer applications')) {
+        if (/\bmca\b|master\s*of\s*computer\s*applications/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 5. BCA
+      if (normOpt.includes('bca') || normOpt.includes('bachelor of computer applications')) {
+        if (/\bbca\b|bachelor\s*of\s*computer\s*applications/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 6. Pharmacy / B.Pharma
+      if (normOpt.includes('pharma') || normOpt.includes('pharmacy')) {
+        if (/pharma|pharmacy/i.test(deg)) {
+          return opt;
+        }
+      }
+
+      // 7. Exact or high-confidence substring match (non-other)
+      if (normOpt === normDeg || (normOpt.length > 3 && normDeg.includes(normOpt))) {
+        return opt;
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Matches numeric CGPA to option range (e.g. 8 matches 8–8.99).
+ */
+export function matchCgpaToOption(
+  options: Array<{ label: string; value: string }>,
+  cgpa: number
+): { label: string; value: string } | null {
+  for (const opt of options) {
+    const raw = opt.label;
+
+    // Range: "9–10", "8–8.99", "7–7.99", "9-10", "8 - 8.99", "9 to 10"
+    const rangeMatch = raw.match(/(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)/i);
+    if (rangeMatch) {
+      const min = parseFloat(rangeMatch[1]);
+      const max = parseFloat(rangeMatch[2]);
+      if (cgpa >= min && cgpa <= max) {
+        return opt;
+      }
+    }
+
+    // Below: "Below 7", "< 7", "Under 7", "Less than 7"
+    const belowMatch = raw.match(/(?:below|<|under|less\s*than)\s*(\d+(?:\.\d+)?)/i);
+    if (belowMatch) {
+      const threshold = parseFloat(belowMatch[1]);
+      if (cgpa < threshold) {
+        return opt;
+      }
+    }
+
+    // Above: "Above 9", "> 9", "9+", ">= 9"
+    const aboveMatch = raw.match(/(?:above|>|more\s*than)\s*(\d+(?:\.\d+)?)/i) || raw.match(/(\d+(?:\.\d+)?)\s*\+/);
+    if (aboveMatch) {
+      const threshold = parseFloat(aboveMatch[1]);
+      if (cgpa >= threshold) {
+        return opt;
+      }
+    }
+
+    // Direct single number match
+    const singleMatch = raw.match(/^\s*(\d+(?:\.\d+)?)\s*$/);
+    if (singleMatch && parseFloat(singleMatch[1]) === cgpa) {
+      return opt;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Matches graduation year to available options.
+ */
+export function matchGraduationYearToOption(
+  options: Array<{ label: string; value: string }>,
+  gradYear: string
+): { label: string; value: string } | null {
+  const normTarget = normalizeOptionText(gradYear);
+  for (const opt of options) {
+    const normOpt = normalizeOptionText(opt.label);
+    if (normOpt === normTarget || normOpt.includes(normTarget) || opt.value === gradYear) {
+      return opt;
+    }
+  }
+  return null;
+}
+
+/**
+ * Matches Yes/No options for boolean preferences.
+ */
+export function matchYesNoOption(
+  options: Array<{ label: string; value: string }>,
+  desiredBool: boolean
+): { label: string; value: string } | null {
+  for (const opt of options) {
+    const norm = normalizeOptionText(opt.label);
+    if (desiredBool && /^(?:yes|y|true|agree|comfortable|available)$/i.test(norm)) {
+      return opt;
+    }
+    if (!desiredBool && /^(?:no|n|false|disagree|uncomfortable|unavailable)$/i.test(norm)) {
+      return opt;
+    }
+  }
+  return null;
+}
 
 interface MappingRule {
   patterns: RegExp[];
@@ -401,6 +577,261 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
     }
   }
 
+  // 1. Availability for six months of office work / Onsite commitment
+  // Per requirements: Never auto-assume or high-confidence answer without explicit candidate preference.
+  if (
+    /\b(?:availability\s*for\s*(?:six|6)\s*months(?:\s*of\s*office\s*work)?|available\s*for\s*(?:six|6)\s*months(?:\s*(?:of\s*)?(?:office\s*work|internship|work))?|willing\s*to\s*work\s*from\s*(?:the\s*)?office\s*for\s*(?:six|6)\s*months|six\s*months\s*(?:of\s*)?office\s*work|6\s*months\s*(?:of\s*)?office\s*work|six\s*months\s*in-office|6\s*months\s*in-office)\b/i.test(combinedContext)
+  ) {
+    return {
+      ...field,
+      suggestedProfileField: 'jobPreferences.workModes',
+      category: 'AVAILABILITY',
+      confidence: 0.6,
+      confidenceLevel: 'MEDIUM',
+      source: 'manual',
+      suggestedValue: null,
+      userValue: undefined,
+      requiresConfirmation: true,
+      approved: false,
+      explanation: 'Requires candidate review and approval for 6-month in-office commitment.'
+    };
+  }
+
+  // 2. Comfort with the job location / Relocation preference
+  if (
+    /\b(?:comfort\s*with\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*(?:with|working\s*in)\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*with\s*(?:this|the)\s*location)\b/i.test(combinedContext)
+  ) {
+    const isWilling = profile.jobPreferences?.willingToRelocate ?? true;
+    let val: string | boolean = isWilling ? 'Yes' : 'No';
+    if (field.fieldType === 'checkbox') {
+      val = isWilling;
+    } else if (field.options && field.options.length > 0) {
+      const matched = matchYesNoOption(field.options, isWilling);
+      val = matched ? (matched.value || matched.label) : (isWilling ? 'Yes' : 'No');
+    }
+    return {
+      ...field,
+      suggestedProfileField: 'jobPreferences.willingToRelocate',
+      category: 'LOCATION',
+      confidence: 0.95,
+      confidenceLevel: 'HIGH',
+      source: 'deterministic',
+      suggestedValue: val,
+      userValue: val,
+      requiresConfirmation: false,
+      explanation: 'Matched verified candidate preference: willing to relocate/comfortable with location.'
+    };
+  }
+
+  // 3. Course Name / Degree
+  if (
+    /\b(?:course\s*name|degree\s*name|highest\s*degree|program\s*name)\b/i.test(combinedContext) ||
+    /^(?:course|degree|qualification)$/i.test(label)
+  ) {
+    if (field.options && field.options.length > 0) {
+      const matchedOpt = matchCandidateDegreeToOption(field.options, profile);
+      if (matchedOpt) {
+        return {
+          ...field,
+          suggestedProfileField: 'education.degree',
+          category: 'EDUCATION',
+          confidence: 0.95,
+          confidenceLevel: 'HIGH',
+          source: 'deterministic',
+          suggestedValue: matchedOpt.value || matchedOpt.label,
+          userValue: matchedOpt.value || matchedOpt.label,
+          requiresConfirmation: false,
+          explanation: `Matched verified degree (${matchedOpt.label}) from profile.`
+        };
+      } else {
+        // Do not assume BE/B.Tech or MBA, leave unanswered for review
+        return {
+          ...field,
+          suggestedProfileField: 'education.degree',
+          category: 'EDUCATION',
+          confidence: 0.3,
+          confidenceLevel: 'LOW',
+          source: 'unmapped',
+          suggestedValue: null,
+          userValue: undefined,
+          requiresConfirmation: true,
+          approved: false,
+          explanation: 'Verified degree does not match listed options. Please review and select manually.'
+        };
+      }
+    } else {
+      const degVal = profile.education?.[0]?.degree || null;
+      return {
+        ...field,
+        suggestedProfileField: 'education.degree',
+        category: 'EDUCATION',
+        confidence: degVal ? 0.95 : 0.2,
+        confidenceLevel: degVal ? 'HIGH' : 'LOW',
+        source: degVal ? 'deterministic' : 'unmapped',
+        suggestedValue: degVal,
+        userValue: degVal || undefined,
+        requiresConfirmation: !degVal,
+        explanation: degVal ? 'Matched verified degree from profile.' : 'Degree missing from profile.'
+      };
+    }
+  }
+
+  // 4. CGPA / GPA Range
+  if (/\b(?:cgpa|gpa|grade\s*point(?:\s*average)?)\b/i.test(combinedContext)) {
+    const rawCgpa = profile.education?.[0]?.cgpa;
+    const numCgpa = rawCgpa !== null && rawCgpa !== undefined && String(rawCgpa).trim() !== '' ? parseFloat(String(rawCgpa)) : null;
+
+    if (numCgpa === null || isNaN(numCgpa)) {
+      return {
+        ...field,
+        suggestedProfileField: 'education.cgpa',
+        category: 'EDUCATION',
+        confidence: 0.2,
+        confidenceLevel: 'LOW',
+        source: 'unmapped',
+        suggestedValue: null,
+        userValue: undefined,
+        requiresConfirmation: true,
+        approved: false,
+        explanation: 'CGPA missing from verified profile. Please review and enter manually.'
+      };
+    }
+
+    if (field.options && field.options.length > 0) {
+      const matchedOpt = matchCgpaToOption(field.options, numCgpa);
+      if (matchedOpt) {
+        return {
+          ...field,
+          suggestedProfileField: 'education.cgpa',
+          category: 'EDUCATION',
+          confidence: 0.95,
+          confidenceLevel: 'HIGH',
+          source: 'deterministic',
+          suggestedValue: matchedOpt.value || matchedOpt.label,
+          userValue: matchedOpt.value || matchedOpt.label,
+          requiresConfirmation: false,
+          explanation: `Matched verified CGPA (${numCgpa}) to option range (${matchedOpt.label}).`
+        };
+      } else {
+        return {
+          ...field,
+          suggestedProfileField: 'education.cgpa',
+          category: 'EDUCATION',
+          confidence: 0.3,
+          confidenceLevel: 'LOW',
+          source: 'unmapped',
+          suggestedValue: null,
+          userValue: undefined,
+          requiresConfirmation: true,
+          approved: false,
+          explanation: `Verified CGPA (${numCgpa}) does not match listed ranges. Please review.`
+        };
+      }
+    } else {
+      return {
+        ...field,
+        suggestedProfileField: 'education.cgpa',
+        category: 'EDUCATION',
+        confidence: 0.95,
+        confidenceLevel: 'HIGH',
+        source: 'deterministic',
+        suggestedValue: String(numCgpa),
+        userValue: String(numCgpa),
+        requiresConfirmation: false,
+        explanation: 'Matched verified CGPA from profile.'
+      };
+    }
+  }
+
+  // 5. Graduation Year
+  if (/\b(?:year\s*of\s*graduation|graduation\s*year|passing\s*year|passout\s*year|expected\s*graduation|completion\s*year)\b/i.test(combinedContext)) {
+    const gradYear = profile.education?.[0]?.expectedGraduation || profile.jobPreferences?.studentEnrollment?.expectedGraduationDate || null;
+    if (!gradYear) {
+      return {
+        ...field,
+        suggestedProfileField: 'education.expectedGraduation',
+        category: 'EDUCATION',
+        confidence: 0.2,
+        confidenceLevel: 'LOW',
+        source: 'unmapped',
+        suggestedValue: null,
+        userValue: undefined,
+        requiresConfirmation: true,
+        approved: false,
+        explanation: 'Graduation year not found in verified profile.'
+      };
+    }
+
+    if (field.options && field.options.length > 0) {
+      const matchedOpt = matchGraduationYearToOption(field.options, String(gradYear));
+      if (matchedOpt) {
+        return {
+          ...field,
+          suggestedProfileField: 'education.expectedGraduation',
+          category: 'EDUCATION',
+          confidence: 0.95,
+          confidenceLevel: 'HIGH',
+          source: 'deterministic',
+          suggestedValue: matchedOpt.value || matchedOpt.label,
+          userValue: matchedOpt.value || matchedOpt.label,
+          requiresConfirmation: false,
+          explanation: `Matched verified graduation year (${gradYear}) from profile.`
+        };
+      } else {
+        return {
+          ...field,
+          suggestedProfileField: 'education.expectedGraduation',
+          category: 'EDUCATION',
+          confidence: 0.3,
+          confidenceLevel: 'LOW',
+          source: 'unmapped',
+          suggestedValue: null,
+          userValue: undefined,
+          requiresConfirmation: true,
+          approved: false,
+          explanation: `Graduation year (${gradYear}) does not match listed options. Please review.`
+        };
+      }
+    } else {
+      return {
+        ...field,
+        suggestedProfileField: 'education.expectedGraduation',
+        category: 'EDUCATION',
+        confidence: 0.95,
+        confidenceLevel: 'HIGH',
+        source: 'deterministic',
+        suggestedValue: String(gradYear),
+        userValue: String(gradYear),
+        requiresConfirmation: false,
+        explanation: 'Matched verified graduation year from profile.'
+      };
+    }
+  }
+
+  // 6. College Name / University
+  if (/\b(?:college\s*name|university\s*name|name\s*of\s*(?:college|university|school|institution)|institution\s*name)\b/i.test(combinedContext)) {
+    const university = profile.education?.[0]?.university || null;
+    let val: string | null = university;
+    if (field.options && field.options.length > 0 && university) {
+      const matched = field.options.find(
+        (o) => normalizeOptionText(o.label) === normalizeOptionText(university) || normalizeOptionText(o.label).includes(normalizeOptionText(university))
+      );
+      val = matched ? (matched.value || matched.label) : null;
+    }
+    return {
+      ...field,
+      suggestedProfileField: 'education.university',
+      category: 'EDUCATION',
+      confidence: val ? 0.95 : 0.2,
+      confidenceLevel: val ? 'HIGH' : 'LOW',
+      source: val ? 'deterministic' : 'unmapped',
+      suggestedValue: val,
+      userValue: val || undefined,
+      requiresConfirmation: !val,
+      explanation: val ? 'Matched verified college name from profile.' : 'College name not matched in options.'
+    };
+  }
+
   // Try matching with each text source in priority order
   const searchTexts = [
     label,
@@ -414,18 +845,49 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
     for (const rule of DETERMINISTIC_RULES) {
       for (const pattern of rule.patterns) {
         if (pattern.test(text)) {
-          const val = rule.getValue(profile, field);
+          let val = rule.getValue(profile, field);
+          let confidence = rule.confidence;
+          let confidenceLevel: ConfidenceLevel = 'HIGH';
+          let requiresConfirmation = false;
+
+          // If the field has options (radio group, select), normalize and match against available choices
+          if (field.options && field.options.length > 0 && val !== null && val !== undefined) {
+            if (typeof val === 'boolean') {
+              const matchedOpt = matchYesNoOption(field.options, val);
+              if (matchedOpt) {
+                val = matchedOpt.value || matchedOpt.label;
+              }
+            } else if (typeof val === 'string') {
+              const normTarget = normalizeOptionText(val);
+              const matchedOpt = field.options.find((o) => {
+                const normOpt = normalizeOptionText(o.label);
+                return normOpt === normTarget || normOpt.includes(normTarget) || normTarget.includes(normOpt);
+              });
+              if (matchedOpt) {
+                val = matchedOpt.value || matchedOpt.label;
+              } else {
+                // Value does not match any available option -> require manual review!
+                val = null;
+                confidence = 0.3;
+                confidenceLevel = 'LOW';
+                requiresConfirmation = true;
+              }
+            }
+          }
+
           return {
             ...field,
             suggestedProfileField: rule.profileField,
             category: rule.category,
-            confidence: rule.confidence,
-            confidenceLevel: 'HIGH',
-            source: 'deterministic',
+            confidence,
+            confidenceLevel,
+            source: val !== null ? 'deterministic' : 'unmapped',
             suggestedValue: val,
-            userValue: val,
-            requiresConfirmation: false,
-            explanation: `Matched from verified profile field: ${rule.profileField}`
+            userValue: val !== null ? val : undefined,
+            requiresConfirmation,
+            explanation: val !== null
+              ? `Matched from verified profile field: ${rule.profileField}`
+              : `Profile field ${rule.profileField} does not match available options.`
           };
         }
       }

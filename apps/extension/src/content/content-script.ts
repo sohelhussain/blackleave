@@ -88,6 +88,25 @@ function executeAutofill(fieldsToFill: DetectedField[]): { filledCount: number }
       element = document.querySelector(`[name="${CSS.escape(field.name)}"]`) as any;
     }
 
+    // Semantic Google Forms fallback: find question item container by title heading
+    if (!element && field.detectedLabel) {
+      const headings = Array.from(document.querySelectorAll('[role="heading"], .M7eMe, .freebirdFormviewerComponentsQuestionBaseTitle, legend'));
+      for (const h of headings) {
+        const hClean = (h.textContent || '').replace(/[*:]/g, '').trim().toLowerCase();
+        const fClean = (field.detectedLabel || '').replace(/[*:]/g, '').trim().toLowerCase();
+        if (hClean === fClean || (hClean.length > 3 && fClean.includes(hClean)) || (fClean.length > 3 && hClean.includes(fClean))) {
+          const qContainer = h.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
+          if (qContainer) {
+            const control = qContainer.querySelector('[role="radiogroup"], [role="radio"], input, textarea, select');
+            if (control) {
+              element = control as any;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     if (element) {
       const success = setNativeValue(element, value);
       if (success) {
@@ -110,8 +129,8 @@ function renderDrawer(fields: DetectedField[]) {
     document.body.appendChild(drawer);
   }
 
-  const readyCount = fields.filter((f) => f.confidenceLevel === 'HIGH').length;
-  const reviewCount = fields.filter((f) => f.confidenceLevel !== 'HIGH').length;
+  const readyCount = fields.filter((f) => f.confidenceLevel === 'HIGH' && f.suggestedValue !== null && !f.requiresConfirmation).length;
+  const reviewCount = fields.filter((f) => f.confidenceLevel !== 'HIGH' || f.requiresConfirmation || f.suggestedValue === null).length;
 
   const html = `
     <div style="display:flex; flex-direction:column; height:100%; font-size:14px; background:#f8fafc;">
@@ -171,10 +190,12 @@ function renderDrawer(fields: DetectedField[]) {
 }
 
 function renderFieldItem(f: DetectedField, i: number): string {
-  const isHigh = f.confidenceLevel === 'HIGH';
-  const isMed = f.confidenceLevel === 'MEDIUM';
+  const isMissing = f.suggestedValue === null || f.source === 'unmapped';
+  const isHigh = f.confidenceLevel === 'HIGH' && !f.requiresConfirmation && !isMissing;
+  const isMed = !isHigh && !isMissing;
+
   const badgeClass = isHigh ? 'applyflow-badge-green' : isMed ? 'applyflow-badge-yellow' : 'applyflow-badge-red';
-  const badgeLabel = isHigh ? '✓ Verified Profile' : isMed ? '⚠ AI Review' : '! Manual Input';
+  const badgeLabel = isHigh ? '✓ Verified' : isMed ? '⚠ Needs Review' : '! Missing Information';
   const displayVal = f.userValue !== undefined ? f.userValue : f.suggestedValue || '';
 
   const categoryLabel = f.category === 'ROLE_MOTIVATION' ? 'Role Motivation' :
@@ -203,20 +224,45 @@ function renderFieldItem(f: DetectedField, i: number): string {
         </span>
       </div>
 
-      <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px; flex-wrap:wrap;">
+        <span style="font-size:10px; font-weight:700; color:#334155; background:#e2e8f0; padding:1px 6px; border-radius:4px;">
+          ${f.fieldType.toUpperCase()}
+        </span>
         <span style="font-size:10px; font-weight:600; text-transform:uppercase; color:#64748b; background:#f1f5f9; padding:1px 6px; border-radius:4px;">
           ${categoryLabel}
+        </span>
+        <span style="font-size:10px; color:#64748b;">
+          Source: ${f.source} (${Math.round(f.confidence * 100)}%)
         </span>
         ${f.suggestedProfileField ? `<span style="font-size:10px; color:#0284c7; font-family:monospace;">${f.suggestedProfileField}</span>` : ''}
       </div>
 
       ${f.explanation ? `<div style="font-size:11px; color:#64748b; margin-bottom:8px;">${f.explanation}</div>` : ''}
 
+      ${f.options && f.options.length > 0 ? `
+        <div style="margin-bottom:8px;">
+          <div style="font-size:11px; font-weight:600; color:#475569; margin-bottom:4px;">Available Choices:</div>
+          <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${f.options.map((opt) => {
+              const isSelected = displayVal === opt.label || displayVal === opt.value;
+              const bg = isSelected ? '#0284c7' : '#f8fafc';
+              const textCol = isSelected ? '#ffffff' : '#334155';
+              const border = isSelected ? '#0284c7' : '#cbd5e1';
+              return `
+                <button type="button" class="applyflow-option-chip" data-field-index="${i}" data-opt-label="${opt.label}" data-opt-value="${opt.value}" style="cursor:pointer; font-size:11px; padding:3px 8px; border-radius:12px; border:1px solid ${border}; background:${bg}; color:${textCol}; font-weight:${isSelected ? '600' : '400'}; transition:all 0.15s ease;">
+                  ${isSelected ? '● ' : '○ '}${opt.label}
+                </button>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      ` : ''}
+
       <div style="display:flex; flex-direction:column; gap:6px;">
         ${f.fieldType === 'textarea' ? `
           <textarea data-field-index="${i}" class="applyflow-input-val" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; font-family:inherit; min-height:64px; box-sizing:border-box;">${displayVal}</textarea>
         ` : `
-          <input type="${f.fieldType === 'radio' || f.fieldType === 'checkbox' ? 'text' : f.fieldType}" data-field-index="${i}" class="applyflow-input-val" value="${displayVal}" placeholder="Enter value..." style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; box-sizing:border-box;" />
+          <input type="${f.fieldType === 'radio' || f.fieldType === 'checkbox' ? 'text' : f.fieldType}" data-field-index="${i}" class="applyflow-input-val" value="${displayVal}" placeholder="${f.options ? 'Select choice above or enter custom...' : 'Enter value...'}" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:6px 8px; font-size:12px; box-sizing:border-box;" />
         `}
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
@@ -241,6 +287,18 @@ function renderFieldItem(f: DetectedField, i: number): string {
 }
 
 function attachDrawerListeners(fields: DetectedField[]) {
+  // Option chip selection
+  document.querySelectorAll('.applyflow-option-chip').forEach((chip) => {
+    chip.addEventListener('click', (e) => {
+      const btn = e.currentTarget as HTMLElement;
+      const idx = parseInt(btn.getAttribute('data-field-index') || '0', 10);
+      const optVal = btn.getAttribute('data-opt-value') || btn.getAttribute('data-opt-label') || '';
+      fields[idx].userValue = optVal;
+      fields[idx].suggestedValue = optVal;
+      fields[idx].approved = true;
+      renderDrawer(fields);
+    });
+  });
   // Close drawer
   document.getElementById('applyflow-close-drawer')?.addEventListener('click', () => {
     const drawer = document.getElementById('applyflow-drawer-host');
