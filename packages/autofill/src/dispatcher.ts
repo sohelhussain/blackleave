@@ -1,6 +1,39 @@
 import { normalizeOptionText } from './mapper.js';
 import { isExtensionUI } from './detector.js';
 
+function isInputElem(el: any): el is HTMLInputElement {
+  if (!el) return false;
+  if (typeof HTMLInputElement !== 'undefined' && el instanceof HTMLInputElement) {
+    if (el.tagName) return el.tagName.toLowerCase() === 'input';
+    return true;
+  }
+  return el.tagName?.toLowerCase() === 'input';
+}
+
+function isTextAreaElem(el: any): el is HTMLTextAreaElement {
+  if (!el) return false;
+  if (typeof HTMLTextAreaElement !== 'undefined' && el instanceof HTMLTextAreaElement) {
+    if (el.tagName) return el.tagName.toLowerCase() === 'textarea';
+    return true;
+  }
+  return el.tagName?.toLowerCase() === 'textarea';
+}
+
+function isSelectElem(el: any): el is HTMLSelectElement {
+  if (!el) return false;
+  if (typeof HTMLSelectElement !== 'undefined' && el instanceof HTMLSelectElement) {
+    if (el.tagName) return el.tagName.toLowerCase() === 'select';
+    return true;
+  }
+  return el.tagName?.toLowerCase() === 'select';
+}
+
+function isHtmlElem(el: any): el is HTMLElement {
+  return typeof HTMLElement !== 'undefined'
+    ? el instanceof HTMLElement
+    : Boolean(el && typeof el === 'object' && el.tagName);
+}
+
 function dispatchBlurEvent(element: HTMLElement): void {
   try {
     if (typeof FocusEvent !== 'undefined') {
@@ -10,7 +43,11 @@ function dispatchBlurEvent(element: HTMLElement): void {
   } catch {
     // fallback
   }
-  element.dispatchEvent(new Event('blur', { bubbles: true }));
+  try {
+    element.dispatchEvent(new Event('blur', { bubbles: true }));
+  } catch {
+    // fallback
+  }
 }
 
 /**
@@ -31,7 +68,7 @@ export function setNativeValue(
     const tagName = element.tagName ? element.tagName.toLowerCase() : '';
 
     // 1. Checkbox
-    if (element instanceof HTMLInputElement && element.type === 'checkbox') {
+    if (isInputElem(element) && element.type === 'checkbox') {
       const boolVal = typeof value === 'boolean' ? value : value === 'true' || value === 'yes';
       if (element.checked !== boolVal) {
         element.checked = boolVal;
@@ -55,7 +92,7 @@ export function setNativeValue(
 
     // 2. Radio buttons & Radiogroups (Google Forms / ARIA / native radio)
     const isRadioElem =
-      (element instanceof HTMLInputElement && element.type === 'radio') ||
+      (isInputElem(element) && element.type === 'radio') ||
       role === 'radio' ||
       role === 'radiogroup' ||
       (role !== 'textbox' &&
@@ -69,20 +106,44 @@ export function setNativeValue(
       return selectRadioOption(element, value);
     }
 
-    // 3. Native Text / Email / Tel / Number / Date Input (and Google Forms text input)
-    if (element instanceof HTMLInputElement) {
-      const stringValue = String(value);
-      if (typeof element.focus === 'function') {
-        element.focus();
+    // 2b. Container element delegation (e.g. .Qr7Oae card or fieldset passed instead of raw control)
+    if (
+      !isInputElem(element) &&
+      !isTextAreaElem(element) &&
+      !isSelectElem(element) &&
+      role !== 'textbox' &&
+      role !== 'radio' &&
+      role !== 'radiogroup' &&
+      role !== 'checkbox' &&
+      typeof element.querySelector === 'function'
+    ) {
+      const childInput = element.querySelector(
+        'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select, [role="radiogroup"], [role="radio"], [role="checkbox"], [role="textbox"], .whsOnd'
+      );
+      if (childInput) {
+        return setNativeValue(childInput as HTMLElement, value);
       }
+    }
+
+    // 3. Native Text / Email / Tel / Number / Date Input (and Google Forms text input)
+    if (isInputElem(element) || tagName === 'input') {
+      const stringValue = String(value);
+      try {
+        if (typeof element.focus === 'function') element.focus();
+        element.dispatchEvent(new Event('focus', { bubbles: true }));
+        element.dispatchEvent(new Event('focusin', { bubbles: true }));
+      } catch {
+        // ignore
+      }
+
       const prototype = Object.getPrototypeOf(element);
-      const prototypeValueDescriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+      const prototypeValueDescriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
       const nativeInputValueSetter = prototypeValueDescriptor?.set;
 
       if (nativeInputValueSetter) {
         nativeInputValueSetter.call(element, stringValue);
       } else {
-        element.value = stringValue;
+        (element as any).value = stringValue;
       }
 
       // Clear React 16/17/18 internal tracker so React notices the new value
@@ -92,26 +153,35 @@ export function setNativeValue(
         tracker.setValue(stringValue);
       }
 
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      try {
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: stringValue }));
+      } catch {
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+      }
       element.dispatchEvent(new Event('change', { bubbles: true }));
+      try {
+        element.dispatchEvent(new Event('focusout', { bubbles: true }));
+      } catch {
+        // ignore
+      }
       dispatchBlurEvent(element);
       return true;
     }
 
     // 4. Native Textarea
-    if (element instanceof HTMLTextAreaElement) {
+    if (isTextAreaElem(element) || tagName === 'textarea') {
       const stringValue = String(value);
       if (typeof element.focus === 'function') {
         element.focus();
       }
       const prototype = Object.getPrototypeOf(element);
-      const prototypeValueDescriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+      const prototypeValueDescriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
       const nativeTextAreaValueSetter = prototypeValueDescriptor?.set;
 
       if (nativeTextAreaValueSetter) {
         nativeTextAreaValueSetter.call(element, stringValue);
       } else {
-        element.value = stringValue;
+        (element as any).value = stringValue;
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,7 +214,7 @@ export function setNativeValue(
     }
 
     // 6. Native Select
-    if (element instanceof HTMLSelectElement) {
+    if (isSelectElem(element)) {
       const strVal = String(value).toLowerCase().trim();
       let matchedIndex = -1;
 
@@ -239,9 +309,16 @@ export function selectRadioOption(
   // Helper to extract radio label & value
   function getRadioTextAndValue(r: HTMLElement): { label: string; value: string; normLabel: string; normVal: string } {
     let lbl = '';
-    const ariaLabel = r.getAttribute('aria-label');
-    if (ariaLabel && !/^(?:other response|your answer)$/i.test(ariaLabel.trim())) {
-      lbl = ariaLabel.trim();
+    const dataVal = r.getAttribute('data-value');
+    if (dataVal && !/^(?:other response|your answer)$/i.test(dataVal.trim())) {
+      lbl = dataVal.trim();
+    }
+
+    if (!lbl) {
+      const ariaLabel = r.getAttribute('aria-label');
+      if (ariaLabel && !/^(?:other response|your answer)$/i.test(ariaLabel.trim())) {
+        lbl = ariaLabel.trim();
+      }
     }
 
     if (!lbl) {
@@ -266,10 +343,10 @@ export function selectRadioOption(
     }
 
     if (!lbl) {
-      const optContainer = r.closest('label, .docssharedWizToggleLabeledContainer, .nWQGrd, [role="listitem"]');
+      const optContainer = r.closest('label, .docssharedWizToggleLabeledContainer, .nWQGrd');
       if (optContainer) {
         const spanLabel = optContainer.querySelector(
-          '.aDTYNe, .snByac, .N5DuFa, .docssharedWizToggleLabeledLabelText, [dir="auto"]'
+          '.docssharedWizToggleLabeledLabelText, .aDTYNe, .snByac, .N5DuFa'
         );
         if (spanLabel && spanLabel !== r && spanLabel.textContent?.trim()) {
           lbl = spanLabel.textContent.trim();
@@ -349,7 +426,7 @@ export function selectRadioOption(
   // Idempotency: If already selected, do not re-dispatch
   const isAlreadyChecked =
     targetRadio.getAttribute('aria-checked') === 'true' ||
-    (targetRadio instanceof HTMLInputElement && targetRadio.checked === true);
+    (isInputElem(targetRadio) && targetRadio.checked === true);
   if (isAlreadyChecked) {
     return true;
   }
@@ -386,7 +463,7 @@ export function selectRadioOption(
     }
 
     // Native radio input
-    if (targetRadio instanceof HTMLInputElement && targetRadio.type === 'radio') {
+    if (isInputElem(targetRadio) && targetRadio.type === 'radio') {
       targetRadio.checked = true;
     }
 
@@ -407,7 +484,7 @@ export function selectRadioOption(
     // Verification step
     const isChecked =
       targetRadio.getAttribute('aria-checked') === 'true' ||
-      (targetRadio instanceof HTMLInputElement && targetRadio.checked === true);
+      (isInputElem(targetRadio) && targetRadio.checked === true);
 
     return isChecked;
   } catch (err) {

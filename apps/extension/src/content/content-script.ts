@@ -52,10 +52,10 @@ function scanPage(): DetectedField[] {
 
   try {
     const adapter = getAdapterForPage(window.location.href, document);
-    const freshFields = adapter.detectAndMap(document, userProfile);
+    const freshFields = adapter.detectAndMap(document, userProfile).slice(0, 50);
 
     // Merge with existing fields to preserve user approvals/edits
-    detectedFields = mergeDetectedFields(detectedFields, freshFields);
+    detectedFields = mergeDetectedFields(detectedFields, freshFields).slice(0, 50);
 
     const readyCount = detectedFields.filter(f => f.suggestedValue !== null && !f.requiresConfirmation).length;
     const duration = Date.now() - startTime;
@@ -153,9 +153,28 @@ function executeAutofill(fieldsToFill: DetectedField[]): { filledCount: number }
       if (element) {
         if (isExtensionUI(element) || !element.isConnected) continue;
 
-        const success = setNativeValue(element, value);
+        let targetControl: HTMLElement = element;
+        const isInteractive =
+          element instanceof HTMLInputElement ||
+          element instanceof HTMLTextAreaElement ||
+          element instanceof HTMLSelectElement ||
+          element.getAttribute('role') === 'radio' ||
+          element.getAttribute('role') === 'radiogroup' ||
+          element.getAttribute('role') === 'checkbox' ||
+          element.getAttribute('role') === 'textbox';
+
+        if (!isInteractive) {
+          const child = element.querySelector(
+            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select, [role="radiogroup"], [role="radio"], [role="checkbox"], [role="textbox"], .whsOnd'
+          );
+          if (child instanceof HTMLElement) {
+            targetControl = child;
+          }
+        }
+
+        const success = setNativeValue(targetControl, value);
         if (success) {
-          highlightAutofilledElement(element, field.confidenceLevel);
+          highlightAutofilledElement(targetControl, field.confidenceLevel);
           filledCount++;
         }
       }

@@ -244,9 +244,12 @@ const DETERMINISTIC_RULES: MappingRule[] = [
   // Full Name
   {
     patterns: [
-      /^(?:full\s*name|legal\s*name|candidate\s*name|your\s*name|name)$/i,
+      /^(?:full\s*name|legal\s*name|candidate\s*name|your\s*name|applicant\s*name|name)(?:\s+your\s+answer)?$/i,
       /\bfull\s*name\b/i,
-      /\blegal\s*name\b/i
+      /\blegal\s*name\b/i,
+      /\bcandidate\s*name\b/i,
+      /\bapplicant\s*name\b/i,
+      /^(?:name|enter\s*your\s*name)$/i
     ],
     profileField: 'personal.fullName',
     category: 'PERSONAL',
@@ -575,6 +578,28 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
         }
       }
     }
+  }
+
+  // 0. Candidate Full Name / Name
+  if (
+    /^(?:name|full\s*name|candidate\s*name|legal\s*name|your\s*name|applicant\s*name)(?:\s+your\s+answer)?$/i.test(label) ||
+    /^(?:name|full\s*name|candidate\s*name|legal\s*name|your\s*name|applicant\s*name)$/i.test(label) ||
+    /\b(?:full\s*name|candidate\s*name|legal\s*name|applicant\s*name)\b/i.test(combinedContext) ||
+    (/\bname\b/i.test(label) && !/\b(?:company|college|university|school|institution|course|program|degree|project|first|last|middle|sur)\s*name\b/i.test(combinedContext))
+  ) {
+    const fullName = profile.personal.fullName;
+    return {
+      ...field,
+      suggestedProfileField: 'personal.fullName',
+      category: 'PERSONAL',
+      confidence: 0.98,
+      confidenceLevel: 'HIGH',
+      source: 'deterministic',
+      suggestedValue: fullName,
+      userValue: fullName,
+      requiresConfirmation: false,
+      explanation: 'Matched candidate full name from profile.'
+    };
   }
 
   // 1. Availability for six months of office work / Onsite commitment

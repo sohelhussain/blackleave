@@ -472,3 +472,78 @@ test('14. Large forms do not block the main thread with repeated full-page scans
   assert.strictEqual(fields.length, 100);
   assert.ok(elapsed < 100, `Large form scan took ${elapsed}ms, must be < 100ms`);
 });
+
+test('15. Question titled "Name" or "Name Your answer" is mapped to personal.fullName with HIGH confidence', () => {
+  const nameVariants = ['Name', 'Name *', 'Name Your answer', 'Candidate Name', 'Full Name'];
+  for (const label of nameVariants) {
+    const field: DetectedField = {
+      id: 'f_name',
+      selector: 'input',
+      detectedLabel: label,
+      fieldType: 'text',
+      placeholder: null,
+      name: null,
+      htmlId: null,
+      ariaLabel: null,
+      isRequired: true,
+      category: 'UNKNOWN',
+      confidence: 0,
+      confidenceLevel: 'LOW',
+      source: 'unmapped',
+      suggestedProfileField: null,
+      suggestedValue: null,
+      requiresConfirmation: false
+    };
+
+    const mapped = mapFieldToProfile(field, INITIAL_SOHEL_PROFILE);
+    assert.strictEqual(mapped.category, 'PERSONAL', `Expected PERSONAL for label "${label}"`);
+    assert.strictEqual(mapped.suggestedProfileField, 'personal.fullName', `Expected personal.fullName for label "${label}"`);
+    assert.strictEqual(mapped.confidenceLevel, 'HIGH', `Expected HIGH confidence for label "${label}"`);
+    assert.strictEqual(mapped.suggestedValue, 'Sohel Hussain', `Expected "Sohel Hussain" for label "${label}"`);
+    assert.strictEqual(mapped.requiresConfirmation, false);
+  }
+});
+
+test('16. Dispatcher delegates from container .Qr7Oae card to child input control', () => {
+  const card = new MockNode('DIV', { class: 'Qr7Oae', role: 'listitem' });
+  const heading = new MockNode('DIV', { class: 'M7eMe' }, 'Name *');
+  const input = new MockNode('INPUT', { class: 'whsOnd', type: 'text' });
+  card.appendChild(heading);
+  card.appendChild(input);
+
+  const filled = setNativeValue(card as any, 'Sohel Hussain');
+  assert.strictEqual(filled, true, 'setNativeValue should succeed on container');
+  assert.strictEqual(input.value, 'Sohel Hussain', 'Child input value should be updated');
+});
+
+test('17. Google Forms questions produce exactly one field per card without runaway inflation', () => {
+  const form = new MockNode('FORM');
+  const questionTitles = [
+    'Email *',
+    'Name *',
+    'Contact number *',
+    'College name *',
+    'Course name *',
+    'CGPA *',
+    'Year of graduation *',
+    'Comfort with the job location *',
+    'Availability for six months of office work *'
+  ];
+
+  for (let i = 0; i < questionTitles.length; i++) {
+    const card = new MockNode('DIV', { class: 'Qr7Oae', role: 'listitem', 'data-item-id': `q_${i}` });
+    card.appendChild(new MockNode('DIV', { class: 'M7eMe', role: 'heading' }, questionTitles[i]));
+    if (i < 4) {
+      card.appendChild(new MockNode('INPUT', { type: 'text', class: 'whsOnd' }));
+    } else {
+      const rg = new MockNode('DIV', { role: 'radiogroup' });
+      rg.appendChild(new MockNode('DIV', { role: 'radio', 'data-value': 'Option A' }, 'Option A'));
+      rg.appendChild(new MockNode('DIV', { role: 'radio', 'data-value': 'Option B' }, 'Option B'));
+      card.appendChild(rg);
+    }
+    form.appendChild(card);
+  }
+
+  const fields = detectFormFields(form as any);
+  assert.strictEqual(fields.length, 9, 'Should detect exactly 9 questions for 9 question cards');
+});

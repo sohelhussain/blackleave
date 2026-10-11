@@ -24,7 +24,7 @@ export function isExtensionUI(el: Element | null): boolean {
 /**
  * Filter out bogus titles like "Approve", "Enter value...", "Your answer", etc.
  */
-export const BOGUS_TITLE_REGEX = /^(?:approve|enter\s*value(?:\.\.\.)?|select\s*choice.*|your\s*answer|other\s*response|submit|clear\s*form|page\s*\d+\s*of\s*\d+|required\s*question|\*)$/i;
+export const BOGUS_TITLE_REGEX = /^(?:approve|enter\s*value(?:\.\.\.)?|select\s*choice.*|your\s*answer|short\s*answer(?:\s*text)?|long\s*answer(?:\s*text)?|other\s*response|submit|clear\s*form|page\s*\d+\s*of\s*\d+|required\s*question|\*)$/i;
 
 export interface DetectionDiagnostics {
   rawCandidates: number;
@@ -52,14 +52,13 @@ export function detectFormFields(
 
   // ---------------------------------------------------------------------------
   // 1. Google Forms & Structured ATS Question Cards
-  // Detect top-level question containers (.Qr7Oae, [role="listitem"], fieldset, etc.)
+  // Detect top-level question containers (.Qr7Oae, [role="listitem"].Qr7Oae, fieldset, etc.)
   // Each question container produces EXACTLY ONE logical field.
   // ---------------------------------------------------------------------------
   const questionCardQuery = [
-    '[role="listitem"]',
     '.Qr7Oae',
     '.freebirdFormviewerViewNumberedItemContainer',
-    '[data-item-id]',
+    '[role="listitem"].Qr7Oae',
     'fieldset'
   ].join(', ');
 
@@ -235,13 +234,19 @@ export function detectFormFields(
 
   const rawElements = Array.from(root.querySelectorAll(controlQuery));
 
-  // Traverse open shadow roots if present
-  const allHostElements = Array.from(root.querySelectorAll('*'));
-  for (const host of allHostElements) {
-    if (isExtensionUI(host)) continue;
-    if (host.shadowRoot) {
-      const shadowElements = host.shadowRoot.querySelectorAll(controlQuery);
-      rawElements.push(...Array.from(shadowElements));
+  // Traverse open shadow roots only on custom elements if needed
+  if (fields.length < MAX_LOGICAL_FIELDS && rawElements.length < MAX_RAW_CANDIDATES) {
+    try {
+      const customHosts = Array.from(root.querySelectorAll(':defined')).slice(0, 50);
+      for (const host of customHosts) {
+        if (isExtensionUI(host)) continue;
+        if (host.shadowRoot) {
+          const shadowElements = host.shadowRoot.querySelectorAll(controlQuery);
+          rawElements.push(...Array.from(shadowElements));
+        }
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -312,7 +317,7 @@ export function detectFormFields(
     diagnosticsOut.scanDurationMs = durationMs;
   }
 
-  return fields;
+  return fields.slice(0, MAX_LOGICAL_FIELDS);
 }
 
 function isVisible(el: Element): boolean {
@@ -621,7 +626,7 @@ export function resolveLabel(el: HTMLElement): string {
         clone.querySelectorAll('input, select, textarea, button').forEach((c) => c.remove());
         return cleanText(clone.textContent || '');
       })
-      .filter((t) => t && t.length > 1 && !/^(?:your answer|required question|\*)$/i.test(t));
+      .filter((t) => t && t.length > 1 && !/^(?:your answer|short answer text|long answer text|required question|\*)$/i.test(t));
     if (texts.length > 0) {
       const text = cleanText(texts.join(' '));
       if (!BOGUS_TITLE_REGEX.test(text)) return text;
@@ -709,6 +714,8 @@ function cleanText(text: string): string {
     .replace(/\s+/g, ' ')
     .replace(/^(\d+[\.\)]\s*)/, '') // strip leading question numbers like "1. "
     .replace(/[*:]/g, '')
+    .replace(/\s*(?:your answer|short answer text|long answer text)\s*$/i, '')
+    .replace(/^\s*(?:your answer|short answer text|long answer text)\s*/i, '')
     .trim();
 }
 
@@ -732,6 +739,19 @@ function generateUniqueSelector(
       const controlSelector = role ? `[role="${role}"]` : tag !== 'div' ? tag : '';
       return `[data-item-id="${escapeCSS(itemId)}"]${controlSelector ? ' ' + controlSelector : ''}`;
     }
+
+    if (container.classList?.contains('Qr7Oae') || container.getAttribute('role') === 'listitem') {
+      const parent = container.parentElement;
+      if (parent) {
+        const cardIndex = Array.from(parent.children).indexOf(container);
+        if (cardIndex >= 0) {
+          const role = el.getAttribute('role');
+          const tag = el.tagName.toLowerCase();
+          const controlSelector = role ? `[role="${role}"]` : tag === 'input' ? 'input.whsOnd, input' : tag !== 'div' ? tag : '';
+          return `.Qr7Oae:nth-child(${cardIndex + 1})${controlSelector ? ' ' + controlSelector : ''}`;
+        }
+      }
+    }
   }
 
   if (el.id) {
@@ -747,8 +767,9 @@ function generateUniqueSelector(
   if (labelledBy) {
     const role = el.getAttribute('role');
     const tagName = el.tagName.toLowerCase();
-    const tagPart = role ? `[role="${escapeCSS(role)}"]` : tagName;
-    return `${tagPart}[aria-labelledby="${escapeCSS(labelledBy)}"]`;
+    const tagPart = role ? `[role="${role}"]` : tagName;
+    const safeAttr = labelledBy.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    return `${tagPart}[aria-labelledby="${safeAttr}"]`;
   }
 
   const dataAutomationId = el.getAttribute('data-automation-id');
