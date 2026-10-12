@@ -235,6 +235,12 @@ export interface DetectedField {
   approved?: boolean;
   requiresConfirmation: boolean;
   explanation?: string;
+  questionIndex?: number;
+  containerSelector?: string;
+  ariaLabelledBy?: string;
+  targetRole?: string;
+  fillStatus?: 'PENDING' | 'FILLED' | 'FAILED' | 'SKIPPED';
+  fillError?: string;
 }
 
 export interface AIAnswerRequest {

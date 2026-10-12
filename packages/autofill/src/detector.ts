@@ -191,6 +191,15 @@ export function detectFormFields(
 
     const selector = generateUniqueSelector(targetElement, index, card);
     const stableId = generateStableFieldId(targetElement, card, title, index);
+    const headingId = headingEl?.getAttribute('id') || undefined;
+    const ariaLabelledBy = targetElement.getAttribute('aria-labelledby') || headingId;
+    const cardParent = card.parentElement;
+    const cardIndexInParent = cardParent ? Array.from(cardParent.children).indexOf(card) : -1;
+    const containerSelector = card.getAttribute('data-item-id')
+      ? `[data-item-id="${escapeCSS(card.getAttribute('data-item-id')!)}"]`
+      : cardIndexInParent >= 0
+      ? `.Qr7Oae:nth-child(${cardIndexInParent + 1})`
+      : undefined;
 
     fields.push({
       id: stableId,
@@ -210,7 +219,11 @@ export function detectFormFields(
       confidenceLevel: 'LOW',
       source: 'unmapped',
       suggestedValue: null,
-      requiresConfirmation: false
+      requiresConfirmation: false,
+      questionIndex: index,
+      containerSelector,
+      ariaLabelledBy,
+      targetRole: targetElement.getAttribute('role') || undefined
     });
 
     index++;
@@ -708,7 +721,7 @@ function getSurroundingText(el: HTMLElement): string {
   return text.length > 200 ? text.substring(0, 200) + '...' : text;
 }
 
-function cleanText(text: string): string {
+export function cleanText(text: string): string {
   return text
     .replace(/[\r\n\t]+/g, ' ')
     .replace(/\s+/g, ' ')
@@ -719,14 +732,14 @@ function cleanText(text: string): string {
     .trim();
 }
 
-function escapeCSS(str: string): string {
+export function escapeCSS(str: string): string {
   if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
     return CSS.escape(str);
   }
   return str.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
 }
 
-function generateUniqueSelector(
+export function generateUniqueSelector(
   el: HTMLElement,
   fallbackIndex: number,
   container?: HTMLElement
@@ -736,7 +749,7 @@ function generateUniqueSelector(
     if (itemId) {
       const role = el.getAttribute('role');
       const tag = el.tagName.toLowerCase();
-      const controlSelector = role ? `[role="${role}"]` : tag !== 'div' ? tag : '';
+      const controlSelector = role ? `[role="${role}"]` : tag === 'input' ? 'input:not([type="hidden"])' : tag !== 'div' ? tag : '';
       return `[data-item-id="${escapeCSS(itemId)}"]${controlSelector ? ' ' + controlSelector : ''}`;
     }
 
@@ -747,7 +760,7 @@ function generateUniqueSelector(
         if (cardIndex >= 0) {
           const role = el.getAttribute('role');
           const tag = el.tagName.toLowerCase();
-          const controlSelector = role ? `[role="${role}"]` : tag === 'input' ? 'input.whsOnd, input' : tag !== 'div' ? tag : '';
+          const controlSelector = role ? `[role="${role}"]` : tag === 'input' ? 'input:not([type="hidden"])' : tag !== 'div' ? tag : '';
           return `.Qr7Oae:nth-child(${cardIndex + 1})${controlSelector ? ' ' + controlSelector : ''}`;
         }
       }

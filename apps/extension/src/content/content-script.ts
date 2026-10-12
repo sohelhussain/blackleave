@@ -111,77 +111,238 @@ function setupDynamicObserver() {
   });
 }
 
-// Perform autofill on approved fields
-function executeAutofill(fieldsToFill: DetectedField[]): { filledCount: number } {
-  isApplyingAutofill = true;
-  let filledCount = 0;
+function cleanHeadingTitle(text: string): string {
+  return (text || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^(\d+[\.\)]\s*)/, '')
+    .replace(/[*:]/g, '')
+    .replace(/\s*(?:your answer|short answer text|long answer text|required question)\s*$/i, '')
+    .replace(/^\s*(?:your answer|short answer text|long answer text|required question)\s*/i, '')
+    .trim()
+    .toLowerCase();
+}
 
-  try {
-    for (const field of fieldsToFill) {
-      const value = field.userValue !== undefined ? field.userValue : field.suggestedValue;
-      if (value === null || value === undefined || value === '') continue;
+function resolveTargetControl(field: DetectedField): HTMLElement | null {
+  const isCandidateValid = (el: Element | null): el is HTMLElement => {
+    if (!el || !(el instanceof HTMLElement)) return false;
+    if (!el.isConnected) return false;
+    if (isExtensionUI(el)) return false;
+    if (el instanceof HTMLInputElement && el.type === 'hidden') return false;
+    return true;
+  };
 
-      let element = document.querySelector(field.selector) as HTMLElement | null;
+  const findInteractiveChild = (container: HTMLElement): HTMLElement | null => {
+    if (field.fieldType === 'radio') {
+      const radioGroup = container.querySelector('[role="radiogroup"]');
+      if (isCandidateValid(radioGroup)) return radioGroup;
+      const radio = container.querySelector('[role="radio"], input[type="radio"]');
+      if (isCandidateValid(radio)) return radio;
+      return container;
+    }
 
-      // If exact selector fails, try fallback by id or name
-      if (!element && field.htmlId) {
-        element = document.getElementById(field.htmlId);
+    if (field.fieldType === 'checkbox') {
+      const chk = container.querySelector('[role="checkbox"], input[type="checkbox"]');
+      if (isCandidateValid(chk)) return chk;
+    }
+
+    if (field.fieldType === 'textarea') {
+      const txt = container.querySelector('textarea, [role="textbox"][aria-multiline="true"]');
+      if (isCandidateValid(txt)) return txt;
+    }
+
+    if (field.fieldType === 'select') {
+      const sel = container.querySelector('select, [role="listbox"], [role="combobox"]');
+      if (isCandidateValid(sel)) return sel;
+    }
+
+    const inp = container.querySelector(
+      'input.whsOnd, input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([aria-label*="Other response" i]):not(.Hvn9fb), textarea, [role="textbox"]:not(input):not(textarea)'
+    );
+    if (isCandidateValid(inp)) return inp;
+
+    return null;
+  };
+
+  // 1. By ariaLabelledBy / heading ID if available
+  if (field.ariaLabelledBy) {
+    const heading = document.getElementById(field.ariaLabelledBy);
+    if (heading && isCandidateValid(heading)) {
+      const card = heading.closest(
+        '[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset'
+      ) as HTMLElement | null;
+      if (card && isCandidateValid(card)) {
+        const ctrl = findInteractiveChild(card);
+        if (ctrl) return ctrl;
       }
-      if (!element && field.name) {
-        element = document.querySelector(`[name="${CSS.escape(field.name)}"]`) as HTMLElement;
-      }
+    }
+  }
 
-      // Semantic Google Forms fallback: find question item container by title heading
-      if (!element && field.detectedLabel) {
-        const headings = Array.from(document.querySelectorAll('[role="heading"], .M7eMe, .freebirdFormviewerComponentsQuestionBaseTitle, legend'));
-        for (const h of headings) {
-          const hClean = (h.textContent || '').replace(/[*:]/g, '').trim().toLowerCase();
-          const fClean = (field.detectedLabel || '').replace(/[*:]/g, '').trim().toLowerCase();
-          if (hClean === fClean || (hClean.length > 3 && fClean.includes(hClean)) || (fClean.length > 3 && hClean.includes(fClean))) {
-            const qContainer = h.closest('[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset');
-            if (qContainer) {
-              const control = qContainer.querySelector('[role="radiogroup"], [role="radio"], input, textarea, select');
-              if (control) {
-                element = control as HTMLElement;
-                break;
-              }
-            }
-          }
-        }
-      }
+  // 2. By question title text match across question headings
+  if (field.detectedLabel) {
+    const fClean = cleanHeadingTitle(field.detectedLabel);
+    const headings = Array.from(
+      document.querySelectorAll(
+        '.M7eMe, [role="heading"], .freebirdFormviewerComponentsQuestionBaseTitle, legend'
+      )
+    );
 
-      if (element) {
-        if (isExtensionUI(element) || !element.isConnected) continue;
-
-        let targetControl: HTMLElement = element;
-        const isInteractive =
-          element instanceof HTMLInputElement ||
-          element instanceof HTMLTextAreaElement ||
-          element instanceof HTMLSelectElement ||
-          element.getAttribute('role') === 'radio' ||
-          element.getAttribute('role') === 'radiogroup' ||
-          element.getAttribute('role') === 'checkbox' ||
-          element.getAttribute('role') === 'textbox';
-
-        if (!isInteractive) {
-          const child = element.querySelector(
-            'input:not([type="hidden"]):not([type="submit"]):not([type="button"]), textarea, select, [role="radiogroup"], [role="radio"], [role="checkbox"], [role="textbox"], .whsOnd'
-          );
-          if (child instanceof HTMLElement) {
-            targetControl = child;
-          }
-        }
-
-        const success = setNativeValue(targetControl, value);
-        if (success) {
-          highlightAutofilledElement(targetControl, field.confidenceLevel);
-          filledCount++;
+    // Pass A: Exact match
+    for (const h of headings) {
+      if (isExtensionUI(h)) continue;
+      const hClean = cleanHeadingTitle(h.textContent || '');
+      if (hClean === fClean) {
+        const card = h.closest(
+          '[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset'
+        ) as HTMLElement | null;
+        if (card && isCandidateValid(card)) {
+          const ctrl = findInteractiveChild(card);
+          if (ctrl) return ctrl;
         }
       }
     }
 
-    console.log(`[blackLeave Content] Autofilled ${filledCount} fields. Form was NOT submitted.`);
-    return { filledCount };
+    // Pass B: Exact word match or full phrase containment
+    for (const h of headings) {
+      if (isExtensionUI(h)) continue;
+      const hClean = cleanHeadingTitle(h.textContent || '');
+      const isWordMatch =
+        (hClean.length > 5 && fClean.length > 5 && (hClean.includes(fClean) || fClean.includes(hClean))) ||
+        (fClean === 'name' && (hClean === 'full name' || hClean === 'candidate name' || hClean === 'your name')) ||
+        (fClean === 'full name' && hClean === 'name');
+
+      if (isWordMatch) {
+        // Prevent false positives: "name" must never match "college name" or "course name"
+        if ((fClean === 'name' || fClean === 'full name') && (hClean.includes('college') || hClean.includes('course') || hClean.includes('company'))) {
+          continue;
+        }
+
+        const card = h.closest(
+          '[role="listitem"], .Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [data-item-id], fieldset'
+        ) as HTMLElement | null;
+        if (card && isCandidateValid(card)) {
+          const ctrl = findInteractiveChild(card);
+          if (ctrl) return ctrl;
+        }
+      }
+    }
+  }
+
+  // 3. By question card index among visible question cards
+  if (field.questionIndex !== undefined) {
+    const allCards = Array.from(
+      document.querySelectorAll(
+        '.Qr7Oae, .freebirdFormviewerViewNumberedItemContainer, [role="listitem"].Qr7Oae, fieldset'
+      )
+    ).filter(c => isCandidateValid(c)) as HTMLElement[];
+
+    if (field.questionIndex < allCards.length) {
+      const card = allCards[field.questionIndex];
+      const ctrl = findInteractiveChild(card);
+      if (ctrl) return ctrl;
+    }
+  }
+
+  // 4. By container selector if available
+  if (field.containerSelector) {
+    try {
+      const card = document.querySelector(field.containerSelector) as HTMLElement | null;
+      if (card && isCandidateValid(card)) {
+        const ctrl = findInteractiveChild(card);
+        if (ctrl) return ctrl;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 5. By field.selector (only if not hidden and not extension UI)
+  if (field.selector) {
+    try {
+      const elem = document.querySelector(field.selector) as HTMLElement | null;
+      if (elem && isCandidateValid(elem)) {
+        const isInteractive =
+          elem instanceof HTMLInputElement ||
+          elem instanceof HTMLTextAreaElement ||
+          elem instanceof HTMLSelectElement ||
+          elem.getAttribute('role') === 'radio' ||
+          elem.getAttribute('role') === 'radiogroup' ||
+          elem.getAttribute('role') === 'checkbox' ||
+          elem.getAttribute('role') === 'textbox';
+
+        if (isInteractive) return elem;
+        const child = findInteractiveChild(elem);
+        if (child) return child;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 6. By htmlId or name
+  if (field.htmlId) {
+    const elem = document.getElementById(field.htmlId);
+    if (elem && isCandidateValid(elem)) return elem;
+  }
+  if (field.name) {
+    try {
+      const elem = document.querySelector(`[name="${CSS.escape(field.name)}"]`) as HTMLElement | null;
+      if (elem && isCandidateValid(elem)) return elem;
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+// Perform autofill on approved fields with live verification
+function executeAutofill(fieldsToFill: DetectedField[]): {
+  filledCount: number;
+  failedCount: number;
+  results: Array<{ fieldId: string; label: string; success: boolean; error?: string }>;
+} {
+  isApplyingAutofill = true;
+  let filledCount = 0;
+  let failedCount = 0;
+  const results: Array<{ fieldId: string; label: string; success: boolean; error?: string }> = [];
+
+  try {
+    for (const field of fieldsToFill) {
+      const value = field.userValue !== undefined ? field.userValue : field.suggestedValue;
+      if (value === null || value === undefined || value === '') {
+        field.fillStatus = 'SKIPPED';
+        continue;
+      }
+
+      const targetControl = resolveTargetControl(field);
+      if (!targetControl) {
+        console.warn(`[blackLeave] Could not resolve live DOM control for question: "${field.detectedLabel}"`);
+        field.fillStatus = 'FAILED';
+        field.fillError = 'Control not found in page DOM';
+        failedCount++;
+        results.push({ fieldId: field.id, label: field.detectedLabel, success: false, error: 'Control not found' });
+        continue;
+      }
+
+      const success = setNativeValue(targetControl, value);
+      if (success) {
+        highlightAutofilledElement(targetControl, field.confidenceLevel);
+        field.fillStatus = 'FILLED';
+        field.fillError = undefined;
+        filledCount++;
+        results.push({ fieldId: field.id, label: field.detectedLabel, success: true });
+      } else {
+        console.warn(`[blackLeave] Failed to set or verify native value for question: "${field.detectedLabel}"`);
+        field.fillStatus = 'FAILED';
+        field.fillError = 'Failed to verify populated value in control';
+        failedCount++;
+        results.push({ fieldId: field.id, label: field.detectedLabel, success: false, error: 'Value verification failed' });
+      }
+    }
+
+    console.log(`[blackLeave Content] Autofilled ${filledCount} fields, ${failedCount} failed. Form was NOT submitted.`);
+    return { filledCount, failedCount, results };
   } finally {
     isApplyingAutofill = false;
   }
@@ -211,6 +372,7 @@ function renderDrawer(fields: DetectedField[]) {
   }
 
   const readyCount = fields.filter((f) => f.confidenceLevel === 'HIGH' && f.suggestedValue !== null && !f.requiresConfirmation).length;
+  const populatedCount = fields.filter((f) => f.fillStatus === 'FILLED').length;
   const reviewCount = fields.filter((f) => f.confidenceLevel !== 'HIGH' || f.requiresConfirmation || f.suggestedValue === null).length;
 
   const html = `
@@ -233,15 +395,23 @@ function renderDrawer(fields: DetectedField[]) {
           <div style="font-size:11px; color:#64748b; font-weight:600;">DETECTED</div>
           <div style="font-size:18px; font-weight:700; color:#0f172a;">${fields.length}</div>
         </div>
-        <div style="flex:1; padding:8px 12px; background:#ecfdf5; border-radius:6px;">
-          <div style="font-size:11px; color:#065f46; font-weight:600;">READY (VERIFIED)</div>
-          <div style="font-size:18px; font-weight:700; color:#059669;">${readyCount}</div>
+        <div style="flex:1; padding:8px 12px; background:${populatedCount > 0 ? '#ecfdf5' : '#f1f5f9'}; border-radius:6px;">
+          <div style="font-size:11px; color:${populatedCount > 0 ? '#065f46' : '#64748b'}; font-weight:600;">${populatedCount > 0 ? 'POPULATED' : 'READY (VERIFIED)'}</div>
+          <div style="font-size:18px; font-weight:700; color:${populatedCount > 0 ? '#059669' : '#059669'};">${populatedCount > 0 ? populatedCount : readyCount}</div>
         </div>
         <div style="flex:1; padding:8px 12px; background:#fffbeb; border-radius:6px;">
           <div style="font-size:11px; color:#92400e; font-weight:600;">NEED REVIEW</div>
           <div style="font-size:18px; font-weight:700; color:#d97706;">${reviewCount}</div>
         </div>
       </div>
+
+      <!-- Execution Status Banner (if autofill ran) -->
+      ${fields.some((f) => f.fillStatus) ? `
+        <div style="padding:10px 20px; background:${populatedCount > 0 ? '#ecfdf5' : '#fff1f2'}; border-bottom:1px solid ${populatedCount > 0 ? '#a7f3d0' : '#fecdd3'}; font-size:12px; color:${populatedCount > 0 ? '#065f46' : '#9f1239'}; font-weight:600; display:flex; align-items:center; justify-content:space-between;">
+          <span>✓ ${populatedCount} fields populated & verified into form.</span>
+          ${fields.filter((f) => f.fillStatus === 'FAILED').length > 0 ? `<span style="color:#b91c1c;">${fields.filter((f) => f.fillStatus === 'FAILED').length} failed to populate</span>` : ''}
+        </div>
+      ` : ''}
 
       <!-- Notice Banner -->
       <div style="padding:10px 20px; background:#eff6ff; border-bottom:1px solid #bfdbfe; font-size:12px; color:#1e40af; display:flex; align-items:center; gap:6px;">
@@ -258,6 +428,11 @@ function renderDrawer(fields: DetectedField[]) {
         <button id="blackleave-fill-all-btn" style="width:100%; padding:10px; background:#0284c7; color:#ffffff; font-weight:600; font-size:14px; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
           ✓ Fill Approved Fields (${fields.filter((f) => f.approved !== false && (f.suggestedValue !== null || f.userValue)).length})
         </button>
+        ${populatedCount > 0 ? `
+          <button id="blackleave-done-btn" style="width:100%; padding:9px; background:#0f172a; color:#ffffff; font-weight:600; font-size:13px; border:none; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center;">
+            Done / Close Drawer
+          </button>
+        ` : ''}
         <div style="font-size:11px; color:#94a3b8; text-align:center;">
           Fields will be populated into the page. Form will NOT be submitted.
         </div>
@@ -271,16 +446,32 @@ function renderDrawer(fields: DetectedField[]) {
 }
 
 function renderFieldItem(f: DetectedField, i: number): string {
+  const isFilled = f.fillStatus === 'FILLED';
+  const isFailed = f.fillStatus === 'FAILED';
   const isMissing = f.suggestedValue === null || f.source === 'unmapped';
   const isHigh = f.confidenceLevel === 'HIGH' && !f.requiresConfirmation && !isMissing;
   const isMed = !isHigh && !isMissing;
 
-  const badgeStyle = isHigh
+  const badgeStyle = isFilled
+    ? 'background:#ecfdf5; color:#065f46; border:1px solid #10b981;'
+    : isFailed
+    ? 'background:#fef2f2; color:#991b1b; border:1px solid #ef4444;'
+    : isHigh
     ? 'background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;'
     : isMed
     ? 'background:#fffbeb; color:#92400e; border:1px solid #fde68a;'
     : 'background:#fef2f2; color:#991b1b; border:1px solid #fecaca;';
-  const badgeLabel = isHigh ? '✓ Verified' : isMed ? '⚠ Needs Review' : '! Missing Information';
+
+  const badgeLabel = isFilled
+    ? '✓ Populated & Verified'
+    : isFailed
+    ? '✕ Fill Failed'
+    : isHigh
+    ? '✓ Ready (Verified)'
+    : isMed
+    ? '⚠ Needs Review'
+    : '! Missing Information';
+
   const displayVal = f.userValue !== undefined ? f.userValue : f.suggestedValue || '';
 
   const categoryLabel = f.category === 'ROLE_MOTIVATION' ? 'Role Motivation' :
@@ -299,7 +490,7 @@ function renderFieldItem(f: DetectedField, i: number): string {
     f.category === 'DEMOGRAPHIC' ? 'Demographics' : 'Unrecognized/open-ended field';
 
   return `
-    <div data-blackleave-root="true" style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
+    <div data-blackleave-root="true" style="background:#ffffff; border:1px solid ${isFilled ? '#10b981' : isFailed ? '#ef4444' : '#e2e8f0'}; border-radius:8px; padding:12px; box-shadow:0 1px 3px rgba(0,0,0,0.03);">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:4px;">
         <label style="font-weight:600; font-size:13px; color:#1e293b; max-width:240px; word-break:break-word;">
           ${f.detectedLabel} ${f.isRequired ? '<span style="color:#ef4444;">*</span>' : ''}
@@ -323,6 +514,7 @@ function renderFieldItem(f: DetectedField, i: number): string {
       </div>
 
       ${f.explanation ? `<div style="font-size:11px; color:#64748b; margin-bottom:8px;">${f.explanation}</div>` : ''}
+      ${f.fillError ? `<div style="font-size:11px; color:#ef4444; font-weight:500; margin-bottom:8px;">⚠️ ${f.fillError}</div>` : ''}
 
       ${f.options && f.options.length > 0 ? `
         <div style="margin-bottom:8px;">
@@ -388,6 +580,14 @@ function attachDrawerListeners(fields: DetectedField[]) {
   // Close drawer
   const closeBtn = document.getElementById('blackleave-close-drawer') || document.getElementById('applyflow-close-drawer');
   closeBtn?.addEventListener('click', () => {
+    const drawer = document.getElementById('blackleave-drawer-host') || document.getElementById('applyflow-drawer-host');
+    if (drawer) drawer.remove();
+    isDrawerOpen = false;
+  });
+
+  // Done button
+  const doneBtn = document.getElementById('blackleave-done-btn');
+  doneBtn?.addEventListener('click', () => {
     const drawer = document.getElementById('blackleave-drawer-host') || document.getElementById('applyflow-drawer-host');
     if (drawer) drawer.remove();
     isDrawerOpen = false;
@@ -468,9 +668,8 @@ function attachDrawerListeners(fields: DetectedField[]) {
     const approvedFields = fields.filter((f) => f.approved !== false && (f.userValue || f.suggestedValue));
     const result = executeAutofill(approvedFields);
 
-    const drawer = document.getElementById('blackleave-drawer-host') || document.getElementById('applyflow-drawer-host');
-    if (drawer) drawer.remove();
-    isDrawerOpen = false;
+    // Keep drawer open with verified status
+    renderDrawer(fields);
 
     // Record in history
     chrome.runtime.sendMessage({
@@ -487,7 +686,11 @@ function attachDrawerListeners(fields: DetectedField[]) {
       }
     });
 
-    showFeedbackBanner(`✓ Successfully populated ${result.filledCount} fields! Please review the form before submitting.`);
+    if (result.failedCount > 0) {
+      showFeedbackBanner(`Populated ${result.filledCount} of ${approvedFields.length} approved fields (${result.failedCount} failed to populate).`);
+    } else {
+      showFeedbackBanner(`✓ Successfully populated & verified ${result.filledCount} fields! Please review the form before submitting.`);
+    }
   });
 }
 
@@ -533,8 +736,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'EXECUTE_AUTOFILL') {
     const fieldsToFill = message.fields || detectedFields.filter((f) => f.confidenceLevel === 'HIGH');
     const result = executeAutofill(fieldsToFill);
-    showFeedbackBanner(`✓ Populated ${result.filledCount} verified fields into the application!`);
-    sendResponse({ success: true, filledCount: result.filledCount });
+    if (result.failedCount > 0) {
+      showFeedbackBanner(`Populated ${result.filledCount} of ${fieldsToFill.length} fields (${result.failedCount} failed).`);
+    } else {
+      showFeedbackBanner(`✓ Populated and verified ${result.filledCount} fields!`);
+    }
+    sendResponse({ success: true, filledCount: result.filledCount, failedCount: result.failedCount, results: result.results });
     return true;
   }
 

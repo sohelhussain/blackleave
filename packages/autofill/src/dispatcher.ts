@@ -62,6 +62,7 @@ export function setNativeValue(
   if (!element) return false;
   if (element.isConnected === false) return false;
   if (isExtensionUI(element)) return false;
+  if (isInputElem(element) && element.type === 'hidden') return false;
 
   try {
     const role = typeof element.getAttribute === 'function' ? element.getAttribute('role')?.toLowerCase() : undefined;
@@ -75,7 +76,7 @@ export function setNativeValue(
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      return true;
+      return element.checked === boolVal;
     }
 
     if (role === 'checkbox') {
@@ -87,7 +88,8 @@ export function setNativeValue(
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      return true;
+      const verified = typeof element.getAttribute === 'function' && element.getAttribute('aria-checked') === String(boolVal);
+      return verified || isChecked === boolVal;
     }
 
     // 2. Radio buttons & Radiogroups (Google Forms / ARIA / native radio)
@@ -136,15 +138,34 @@ export function setNativeValue(
         // ignore
       }
 
-      const prototype = Object.getPrototypeOf(element);
-      const prototypeValueDescriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
-      const nativeInputValueSetter = prototypeValueDescriptor?.set;
+      let proto = Object.getPrototypeOf(element);
+      let nativeInputValueSetter: ((v: any) => void) | undefined;
+      while (proto) {
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (desc && desc.set) {
+          nativeInputValueSetter = desc.set;
+          break;
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
+
+      if (!nativeInputValueSetter && typeof HTMLInputElement !== 'undefined') {
+        const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+        if (desc && desc.set) {
+          nativeInputValueSetter = desc.set;
+        }
+      }
 
       if (nativeInputValueSetter) {
-        nativeInputValueSetter.call(element, stringValue);
+        try {
+          nativeInputValueSetter.call(element, stringValue);
+        } catch {
+          (element as any).value = stringValue;
+        }
       } else {
         (element as any).value = stringValue;
       }
+      (element as any).value = stringValue;
 
       // Clear React 16/17/18 internal tracker so React notices the new value
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -154,9 +175,9 @@ export function setNativeValue(
       }
 
       try {
-        element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: stringValue }));
+        element.dispatchEvent(new InputEvent('input', { bubbles: true, cancelable: true, composed: true, inputType: 'insertText', data: stringValue }));
       } catch {
-        element.dispatchEvent(new Event('input', { bubbles: true }));
+        element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       }
       element.dispatchEvent(new Event('change', { bubbles: true }));
       try {
@@ -165,7 +186,10 @@ export function setNativeValue(
         // ignore
       }
       dispatchBlurEvent(element);
-      return true;
+
+      // Verify live value
+      const isVerified = (element as any).value === stringValue;
+      return isVerified;
     }
 
     // 4. Native Textarea
@@ -174,15 +198,35 @@ export function setNativeValue(
       if (typeof element.focus === 'function') {
         element.focus();
       }
-      const prototype = Object.getPrototypeOf(element);
-      const prototypeValueDescriptor = prototype ? Object.getOwnPropertyDescriptor(prototype, 'value') : null;
-      const nativeTextAreaValueSetter = prototypeValueDescriptor?.set;
+
+      let proto = Object.getPrototypeOf(element);
+      let nativeTextAreaValueSetter: ((v: any) => void) | undefined;
+      while (proto) {
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (desc && desc.set) {
+          nativeTextAreaValueSetter = desc.set;
+          break;
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
+
+      if (!nativeTextAreaValueSetter && typeof HTMLTextAreaElement !== 'undefined') {
+        const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+        if (desc && desc.set) {
+          nativeTextAreaValueSetter = desc.set;
+        }
+      }
 
       if (nativeTextAreaValueSetter) {
-        nativeTextAreaValueSetter.call(element, stringValue);
+        try {
+          nativeTextAreaValueSetter.call(element, stringValue);
+        } catch {
+          (element as any).value = stringValue;
+        }
       } else {
         (element as any).value = stringValue;
       }
+      (element as any).value = stringValue;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const tracker = (element as any)._valueTracker;
@@ -190,10 +234,10 @@ export function setNativeValue(
         tracker.setValue(stringValue);
       }
 
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       element.dispatchEvent(new Event('change', { bubbles: true }));
       dispatchBlurEvent(element);
-      return true;
+      return (element as any).value === stringValue;
     }
 
     // 5. ARIA Textbox, contenteditable, or Google Forms paper input
@@ -302,6 +346,7 @@ export function selectRadioOption(
     radios = [element];
   }
 
+  radios = radios.filter((r) => !isExtensionUI(r));
   if (radios.length === 0) return false;
 
   const doc = container.ownerDocument || (typeof document !== 'undefined' ? document : null);
