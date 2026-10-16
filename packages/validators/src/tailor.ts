@@ -90,7 +90,7 @@ export const AnalyzeJobMatchRequestSchema = z.object({
   jobText: z.string().min(10, 'Job description must be at least 10 characters').max(30000),
   jobTitle: z.string().max(300).optional(),
   companyName: z.string().max(200).optional(),
-  profileContext: z.lazy(() => UserProfileSchema.partial()).optional()
+  profileContext: z.record(z.any()).optional()
 });
 
 export const TailorResumeRequestSchema = z.object({
@@ -98,7 +98,7 @@ export const TailorResumeRequestSchema = z.object({
   jobTitle: z.string().max(300).optional(),
   companyName: z.string().max(200).optional(),
   baseResumeId: z.string().optional(),
-  profileContext: z.lazy(() => UserProfileSchema.partial()).optional()
+  profileContext: z.record(z.any()).optional()
 });
 
 export const SaveTailoredResumeRequestSchema = z.object({
