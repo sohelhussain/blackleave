@@ -124,6 +124,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@applyflow/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@applyflow/database':
         specifier: workspace:*
         version: link:../../packages/database
