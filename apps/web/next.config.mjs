@@ -8,7 +8,7 @@ const monorepoRoot = path.resolve(__dirname, '../../');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui', '@applyflow/database'],
+  transpilePackages: ['@applyflow/types', '@applyflow/validators', '@applyflow/ui', '@applyflow/database', '@applyflow/ai'],
   experimental: {
     outputFileTracingRoot: monorepoRoot,
   },
