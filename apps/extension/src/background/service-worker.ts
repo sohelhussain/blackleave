@@ -1,6 +1,12 @@
 import { INITIAL_SOHEL_PROFILE, UserProfile } from '@applyflow/types';
 
-const API_BASE_URL = 'http://localhost:3001';
+const IS_PROD = Boolean((import.meta as any).env?.PROD);
+const API_BASE_URL =
+  (import.meta as any).env?.VITE_API_URL ||
+  (IS_PROD ? 'https://blackleave.vercel.app' : 'http://localhost:3001');
+const DASHBOARD_URL =
+  (import.meta as any).env?.VITE_DASHBOARD_URL ||
+  (IS_PROD ? 'https://blackleave.vercel.app' : 'http://localhost:3000');
 
 // Initialize profile in chrome.storage on installation
 chrome.runtime.onInstalled.addListener(async () => {
@@ -163,24 +169,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         case 'RECORD_APPLICATION': {
           const { application } = message;
+          if (!application || typeof application !== 'object' || !application.company) {
+            sendResponse({ success: false, error: 'Invalid application payload' });
+            break;
+          }
+
+          let apiSynced = false;
           try {
-            await fetch(`${API_BASE_URL}/api/applications`, {
+            const res = await fetch(`${API_BASE_URL}/api/applications`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(application)
+              body: JSON.stringify(application),
+              credentials: 'include'
             });
+            if (res.ok) {
+              apiSynced = true;
+            }
           } catch {
-            // Store locally in extension history as fallback
-            const { history = [] } = await chrome.storage.local.get('history');
-            history.unshift(application);
-            await chrome.storage.local.set({ history });
+            // API server offline or unauthenticated
           }
-          sendResponse({ success: true });
+
+          // Always ensure offline history is safely stored and deduplicated locally
+          try {
+            const { history = [] } = await chrome.storage.local.get('history');
+            const cleanHistory = Array.isArray(history) ? history : [];
+
+            // Deduplicate by ID or (url + date)
+            const existingIdx = cleanHistory.findIndex(
+              (h: any) =>
+                h.id === application.id ||
+                (application.url && h.url === application.url && h.date === application.date)
+            );
+
+            if (existingIdx >= 0) {
+              cleanHistory[existingIdx] = { ...cleanHistory[existingIdx], ...application };
+            } else {
+              cleanHistory.unshift(application);
+            }
+
+            // Cap local history to 200 items to prevent local storage quota overflow
+            if (cleanHistory.length > 200) {
+              cleanHistory.length = 200;
+            }
+
+            await chrome.storage.local.set({ history: cleanHistory });
+          } catch (storageErr) {
+            console.error('[ApplyFlow SW] Failed to save application history locally:', storageErr);
+          }
+
+          sendResponse({ success: true, apiSynced });
+          break;
+        }
+
+        case 'GET_APPLICATION_HISTORY': {
+          try {
+            const { history = [] } = await chrome.storage.local.get('history');
+            sendResponse({ success: true, history: Array.isArray(history) ? history : [] });
+          } catch (err: any) {
+            sendResponse({ success: false, error: err.message, history: [] });
+          }
           break;
         }
 
         case 'OPEN_DASHBOARD': {
-          await chrome.tabs.create({ url: 'http://localhost:5173' });
+          await chrome.tabs.create({ url: DASHBOARD_URL });
+          sendResponse({ success: true });
+          break;
+        }
+
+        case 'OPEN_TAILOR_DASHBOARD': {
+          const { role = '', company = '', jd = '' } = message;
+          const query = new URLSearchParams({ tab: 'tailor', role, company, jd });
+          await chrome.tabs.create({ url: `${DASHBOARD_URL}?${query.toString()}` });
           sendResponse({ success: true });
           break;
         }

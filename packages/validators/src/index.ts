@@ -235,3 +235,5 @@ export const ApplicationRecordSchema = z.object({
   status: z.enum(['Draft', 'Reviewed', 'Applied', 'Rejected', 'Interview', 'Offer']),
   notes: z.string().nullable().optional()
 });
+
+export * from './tailor.js';

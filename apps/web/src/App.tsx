@@ -4,6 +4,7 @@ import { Sidebar, TabType } from './components/Sidebar';
 import { DashboardPage } from './views/DashboardPage';
 import { ProfilePage } from './views/ProfilePage';
 import { ResumesPage } from './views/ResumesPage';
+import { ResumeTailorPage } from './views/ResumeTailorPage';
 import { HistoryPage } from './views/HistoryPage';
 import { AISettingsPage } from './views/AISettingsPage';
 import { PrivacyPage } from './views/PrivacyPage';
@@ -41,6 +42,16 @@ const AppContent: React.FC = () => {
       fetchApplications();
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab === 'tailor') {
+        setCurrentTab('tailor');
+      }
+    }
+  }, []);
 
   async function fetchApplications() {
     try {
@@ -108,7 +119,7 @@ const AppContent: React.FC = () => {
             <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Section</span>
             <span className="text-slate-300">/</span>
             <span className="text-sm font-bold text-slate-800 capitalize">
-              {currentTab === 'ai' ? 'AI Settings' : currentTab}
+              {currentTab === 'ai' ? 'AI Settings' : currentTab === 'tailor' ? 'Resume Tailor & Match' : currentTab}
             </span>
           </div>
 
@@ -161,6 +172,13 @@ const AppContent: React.FC = () => {
               onMergeImportedProfile={async (imported) => {
                 await handleSaveProfile({ ...profile, ...imported });
               }}
+            />
+          )}
+
+          {currentTab === 'tailor' && (
+            <ResumeTailorPage
+              profile={profile}
+              onSaveProfile={handleSaveProfile}
             />
           )}
 

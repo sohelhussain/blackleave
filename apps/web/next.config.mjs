@@ -16,11 +16,11 @@ const nextConfig = {
     const rawApiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL;
 
     // 1. If an external backend URL is configured (production or custom host),
-    // proxy all /api/* requests to that backend.
+    // proxy unhandled /api/* requests to that backend.
     if (rawApiUrl && !rawApiUrl.includes('localhost')) {
       const cleanUrl = rawApiUrl.replace(/\/$/, '');
       return {
-        beforeFiles: [
+        afterFiles: [
           {
             source: '/api/:path*',
             destination: `${cleanUrl}/api/:path*`
@@ -30,11 +30,11 @@ const nextConfig = {
     }
 
     // 2. In local development, if external API_URL is not set or set to localhost,
-    // proxy to the local Express backend on port 3001.
+    // proxy unhandled /api/* requests to the local Express backend on port 3001.
     if (process.env.NODE_ENV === 'development') {
       const devTarget = rawApiUrl ? rawApiUrl.replace(/\/$/, '') : 'http://localhost:3001';
       return {
-        beforeFiles: [
+        afterFiles: [
           {
             source: '/api/:path*',
             destination: `${devTarget}/api/:path*`

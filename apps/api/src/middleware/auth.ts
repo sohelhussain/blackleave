@@ -67,3 +67,33 @@ export async function authMiddleware(req: AuthenticatedRequest, res: Response, n
     });
   }
 }
+
+/**
+ * Optional authentication middleware.
+ * Attaches user and profile if a valid session is provided,
+ * but allows unauthenticated callers to proceed (e.g. for endpoints that accept a client-provided profileContext).
+ */
+export async function optionalAuthMiddleware(req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<void> {
+  const token = extractSessionToken(req);
+  if (!token) {
+    return next();
+  }
+
+  try {
+    const session = await validateSession(token);
+    if (session && session.user) {
+      req.user = {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name || undefined
+      };
+
+      if (session.user.profile) {
+        req.profile = mapPrismaProfileToUserProfile(session.user.profile);
+      }
+    }
+  } catch {
+    // Session parsing error ignored for optional auth
+  }
+  next();
+}

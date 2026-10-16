@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateSessionToken, getUserProfile } from '@applyflow/database';
+import { validateSessionToken, getUserProfile, SESSION_COOKIE_NAME } from '@applyflow/database';
 import { calculateProfileCompleteness } from '@applyflow/types';
 
 export const dynamic = 'force-dynamic';
@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     // 1. Extract session token from cookies or Authorization header
-    let token = req.cookies.get('session_token')?.value;
+    let token = req.cookies.get(SESSION_COOKIE_NAME)?.value || req.cookies.get('session_token')?.value;
 
     if (!token) {
       const authHeader = req.headers.get('authorization');

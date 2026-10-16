@@ -7,10 +7,11 @@ import {
   Bot,
   ShieldCheck,
   CheckCircle2,
-  LogOut
+  LogOut,
+  Sparkles
 } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'profile' | 'resumes' | 'history' | 'ai' | 'privacy';
+export type TabType = 'dashboard' | 'profile' | 'resumes' | 'tailor' | 'history' | 'ai' | 'privacy';
 
 interface SidebarProps {
   currentTab: TabType;
@@ -33,6 +34,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
     { id: 'profile', label: 'Candidate Profile', icon: <User className="w-4 h-4" /> },
     { id: 'resumes', label: 'Resumes & Parser', icon: <FileText className="w-4 h-4" /> },
+    { id: 'tailor', label: 'Resume Tailor', icon: <Sparkles className="w-4 h-4 text-sky-400" /> },
     { id: 'history', label: 'Application History', icon: <History className="w-4 h-4" /> },
     { id: 'ai', label: 'AI Settings', icon: <Bot className="w-4 h-4" /> },
     { id: 'privacy', label: 'Security & Privacy', icon: <ShieldCheck className="w-4 h-4" /> }

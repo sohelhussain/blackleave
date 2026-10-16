@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { authMiddleware } from './middleware/auth.js';
+import { authMiddleware, optionalAuthMiddleware } from './middleware/auth.js';
 import { authRouter } from './routes/auth.routes.js';
 import { profileRouter } from './routes/profile.routes.js';
 import { educationRouter } from './routes/education.routes.js';
@@ -11,6 +11,7 @@ import { jobPreferencesRouter } from './routes/job-preferences.routes.js';
 import { resumesRouter } from './routes/resumes.routes.js';
 import { applicationsRouter } from './routes/applications.routes.js';
 import { aiRouter } from './routes/ai.routes.js';
+import { tailorRouter } from './routes/tailor.routes.js';
 
 import { parseCookies } from './utils/session.js';
 
@@ -42,7 +43,8 @@ export function createApp() {
   app.use('/api/job-preferences', authMiddleware, jobPreferencesRouter);
   app.use('/api/resumes', authMiddleware, resumesRouter);
   app.use('/api/applications', authMiddleware, applicationsRouter);
-  app.use('/api/ai', authMiddleware, aiRouter);
+  app.use('/api/ai', optionalAuthMiddleware, aiRouter);
+  app.use('/api/tailor', tailorRouter);
 
   return app;
 }

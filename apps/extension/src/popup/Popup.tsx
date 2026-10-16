@@ -153,6 +153,22 @@ export const Popup: React.FC = () => {
               Verified Profile Active
             </span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              chrome.runtime.sendMessage({
+                type: 'OPEN_TAILOR_DASHBOARD',
+                role: detectedRole,
+                company: detectedCompany,
+                jd: jobInfo?.description || ''
+              });
+            }}
+            className="w-full mt-2.5 py-1.5 px-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg font-semibold text-[11px] flex items-center justify-center gap-1.5 transition-colors"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Tailor Resume in Dashboard</span>
+          </button>
         </div>
 
         {/* Status Metrics */}

@@ -104,7 +104,24 @@ function setupDynamicObserver() {
     }, 600);
   });
 
-  observer.observe(document.body, {
+  if (!document.body) {
+    window.addEventListener(
+      'DOMContentLoaded',
+      () => {
+        if (document.body && observer) {
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: false
+          });
+        }
+      },
+      { once: true }
+    );
+    return;
+  }
+
+  observer?.observe(document.body, {
     childList: true,
     subtree: true,
     attributes: false

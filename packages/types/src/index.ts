@@ -420,4 +420,5 @@ export * from './countries.js';
 export * from './industries.js';
 export * from './application-questions.js';
 export * from './initial-profile.js';
+export * from './tailor.js';
 
