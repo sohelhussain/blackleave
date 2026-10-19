@@ -2,6 +2,7 @@ import { DetectedField, UserProfile } from '@applyflow/types';
 import { detectFormFields } from '../detector.js';
 import { mapAllFields } from '../mapper.js';
 import { GoogleFormsAdapter } from './google-forms.js';
+import { KekaAdapter } from './keka.js';
 
 export interface SiteAdapter {
   name: string;
@@ -183,6 +184,7 @@ export class SmartRecruitersAdapter implements SiteAdapter {
 
 export const ALL_ADAPTERS: SiteAdapter[] = [
   new GoogleFormsAdapter(),
+  new KekaAdapter(),
   new GreenhouseAdapter(),
   new LeverAdapter(),
   new WorkdayAdapter(),

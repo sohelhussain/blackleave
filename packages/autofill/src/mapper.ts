@@ -207,6 +207,82 @@ export function matchYesNoOption(
   return null;
 }
 
+export function parseYearMonth(dateStr: string | null | undefined): { year: number; month: number } | null {
+  if (!dateStr || typeof dateStr !== 'string') return null;
+  const s = dateStr.trim();
+  const m1 = s.match(/^(\d{1,2})[\/\-](\d{4})$/);
+  if (m1) {
+    const month = parseInt(m1[1], 10);
+    const year = parseInt(m1[2], 10);
+    if (month >= 1 && month <= 12 && year > 1900 && year < 2100) return { year, month };
+  }
+  const m2 = s.match(/^(\d{4})[\/\-](\d{1,2})$/);
+  if (m2) {
+    const year = parseInt(m2[1], 10);
+    const month = parseInt(m2[2], 10);
+    if (month >= 1 && month <= 12 && year > 1900 && year < 2100) return { year, month };
+  }
+  const m3 = s.match(/^(\d{4})$/);
+  if (m3) {
+    const year = parseInt(m3[1], 10);
+    if (year > 1900 && year < 2100) return { year, month: 1 };
+  }
+  return null;
+}
+
+export function calculateTotalExperienceYearsAndMonths(experience: any[]): { years: number; months: number; totalMonths: number } {
+  if (!Array.isArray(experience) || experience.length === 0) {
+    return { years: 0, months: 0, totalMonths: 0 };
+  }
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const intervals: Array<{ start: number; end: number }> = [];
+
+  for (const role of experience) {
+    const start = parseYearMonth(role.startDate);
+    if (!start) continue;
+    let end = parseYearMonth(role.endDate);
+    if (!end) {
+      if (role.current || !role.endDate || /present|current|now/i.test(String(role.endDate))) {
+        end = { year: currentYear, month: currentMonth };
+      } else {
+        continue;
+      }
+    }
+    const startIdx = start.year * 12 + (start.month - 1);
+    const endIdx = end.year * 12 + (end.month - 1);
+    if (endIdx >= startIdx) {
+      intervals.push({ start: startIdx, end: endIdx });
+    }
+  }
+
+  if (intervals.length === 0) {
+    return { years: 0, months: 0, totalMonths: 0 };
+  }
+
+  intervals.sort((a, b) => a.start - b.start);
+  const merged: Array<{ start: number; end: number }> = [{ ...intervals[0] }];
+  for (let i = 1; i < intervals.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = intervals[i];
+    if (curr.start <= prev.end) {
+      prev.end = Math.max(prev.end, curr.end);
+    } else {
+      merged.push({ ...curr });
+    }
+  }
+
+  let totalMonths = 0;
+  for (const inv of merged) {
+    totalMonths += (inv.end - inv.start + 1);
+  }
+
+  const years = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  return { years, months, totalMonths };
+}
+
 interface MappingRule {
   patterns: RegExp[];
   profileField: string;
@@ -227,6 +303,26 @@ const DETERMINISTIC_RULES: MappingRule[] = [
     category: 'PERSONAL',
     getValue: (p) => p.personal.firstName,
     confidence: 0.99
+  },
+  // Middle Name
+  {
+    patterns: [
+      /^(?:middle\s*name|mname|middle_name|candidate_middle_name)$/i,
+      /\bmiddle\s*name\b/i
+    ],
+    profileField: 'personal.middleName',
+    category: 'PERSONAL',
+    getValue: (p) => {
+      if (p.personal.middleName !== undefined && p.personal.middleName !== null) {
+        return p.personal.middleName;
+      }
+      const parts = (p.personal.fullName || '').trim().split(/\s+/);
+      if (parts.length > 2) {
+        return parts.slice(1, -1).join(' ');
+      }
+      return '';
+    },
+    confidence: 0.95
   },
   // Last Name
   {
@@ -268,17 +364,45 @@ const DETERMINISTIC_RULES: MappingRule[] = [
     getValue: (p) => p.personal.email,
     confidence: 0.99
   },
-  // Phone
+  // Phone Country Code
+  {
+    patterns: [
+      /^(?:country\s*code|dialing\s*code|phone\s*country\s*code|mobile\s*country\s*code)$/i,
+      /\bcountry\s*code\b/i,
+      /\bdialing\s*code\b/i,
+      /mobilephone\.countrycode/i
+    ],
+    profileField: 'personal.phoneCountryCode',
+    category: 'PERSONAL',
+    getValue: (p) => {
+      if (p.personal.phoneCountryCode) return p.personal.phoneCountryCode;
+      const phone = p.personal.phone || '';
+      const match = phone.match(/^\+(\d{1,4})/);
+      if (match) return `+${match[1]}`;
+      if (p.personal.country === 'India' || p.personal.country === 'IN') return '+91';
+      if (p.personal.country === 'United States' || p.personal.country === 'US') return '+1';
+      return '+91';
+    },
+    confidence: 0.98
+  },
+  // Phone / Mobile
   {
     patterns: [
       /^(?:phone|phone\s*number|mobile|mobile\s*number|telephone|contact\s*number|cell)$/i,
       /\bphone\b/i,
       /\bmobile\b/i,
-      /\bcontact\s*number\b/i
+      /\bcontact\s*number\b/i,
+      /mobilephone\.number/i
     ],
     profileField: 'personal.phone',
     category: 'PERSONAL',
-    getValue: (p) => p.personal.phone,
+    getValue: (p, field) => {
+      const phone = p.personal.phone || '';
+      if (field.htmlId === 'mobilePhone.number' || field.name === 'mobilePhone.number') {
+        return phone.replace(/^\+\d{1,4}\s*/, '');
+      }
+      return phone;
+    },
     confidence: 0.99
   },
   // Address / Street Address
@@ -318,16 +442,92 @@ const DETERMINISTIC_RULES: MappingRule[] = [
     getValue: (p) => p.personal.state,
     confidence: 0.95
   },
-  // Country
+  // Country / Nationality
   {
     patterns: [
-      /^(?:country|nation)$/i,
-      /\bcountry\b/i
+      /^(?:country|nation|nationality)$/i,
+      /\bcountry\b/i,
+      /\bnationality\b/i
     ],
     profileField: 'personal.country',
     category: 'LOCATION',
     getValue: (p) => p.personal.country,
     confidence: 0.95
+  },
+  // Work Experience (Years)
+  {
+    patterns: [
+      /^(?:total\s*experience|experience\s*\(in\s*years\)|experience\s*years|work\s*experience\s*years)$/i,
+      /\bexperience\s*\(in\s*years\)\b/i,
+      /\btotal\s*experience\b/i,
+      /workexperience\.years/i
+    ],
+    profileField: 'experience.years',
+    category: 'EXPERIENCE',
+    getValue: (p) => {
+      const dur = calculateTotalExperienceYearsAndMonths(p.experience || []);
+      return String(dur.years);
+    },
+    confidence: 0.95
+  },
+  // Work Experience (Months)
+  {
+    patterns: [
+      /^(?:experience\s*months|work\s*experience\s*months)$/i,
+      /\bexperience\s*months\b/i,
+      /workexperience\.months/i
+    ],
+    profileField: 'experience.months',
+    category: 'EXPERIENCE',
+    getValue: (p) => {
+      const dur = calculateTotalExperienceYearsAndMonths(p.experience || []);
+      return String(dur.months);
+    },
+    confidence: 0.95
+  },
+  // Preferred Location
+  {
+    patterns: [
+      /^(?:preferred\s*location|location\s*preference|desired\s*location|target\s*location)$/i,
+      /\bpreferred\s*location\b/i,
+      /\blocation\s*preference\b/i,
+      /locationpreference/i
+    ],
+    profileField: 'jobPreferences.preferredLocations',
+    category: 'LOCATION',
+    getValue: (p, field) => {
+      const preferred = p.jobPreferences?.preferredLocations || [];
+      if (field.options && field.options.length > 0) {
+        for (const loc of preferred) {
+          const normLoc = normalizeOptionText(loc);
+          const matched = field.options.find(
+            (o) => normalizeOptionText(o.label) === normLoc || normalizeOptionText(o.value) === normLoc
+          );
+          if (matched) return matched.value || matched.label;
+        }
+      }
+      return preferred[0] || p.personal.city;
+    },
+    confidence: 0.95
+  },
+  // Skills
+  {
+    patterns: [
+      /^(?:skills|key\s*skills|technical\s*skills|add\s*new\s*skill)$/i,
+      /\bkey\s*skills\b/i,
+      /\bskills\b/i
+    ],
+    profileField: 'skills',
+    category: 'SKILLS',
+    getValue: (p) => {
+      const skillsSet = new Set<string>();
+      (p.jobPreferences?.targetRoles || []).forEach((r) => skillsSet.add(r));
+      (p.experience || []).forEach((e) => (e.technologies || []).forEach((t) => skillsSet.add(t)));
+      (p.projects || []).forEach((pr) => (pr.technologies || []).forEach((t) => skillsSet.add(t)));
+      const skillList = Array.from(skillsSet);
+      return skillList.length > 0 ? skillList.slice(0, 5).join(', ') : 'React, TypeScript';
+    },
+    confidence: 0.90
   },
   // Pincode / Zip
   {
@@ -441,8 +641,9 @@ const DETERMINISTIC_RULES: MappingRule[] = [
   // Notice Period / Availability / Joining Date
   {
     patterns: [
-      /^(?:notice\s*period|availability|available\s*to\s*start|how\s*soon\s*can\s*you\s*start)$/i,
+      /^(?:notice\s*period|availability|available\s*to\s*(?:start|join)|available\s*to\s*join\s*\(in\s*days\)|how\s*soon\s*can\s*you\s*start)$/i,
       /\bnotice\s*period\b/i,
+      /\bavailable\s*to\s*join\b/i,
       /how\s*soon\s*(?:would\s*you\s*be\s*able\s*to|can\s*you)\s*(?:to\s*)?join/i,
       /how\s*soon\s*(?:would\s*you\s*be\s*available|can\s*you\s*(?:join|start))/i,
       /when\s*(?:would\s*you\s*be\s*available|can\s*you)\s*(?:to\s*)?(?:start|join)/i,
@@ -454,7 +655,17 @@ const DETERMINISTIC_RULES: MappingRule[] = [
     ],
     profileField: 'jobPreferences.noticePeriod',
     category: 'AVAILABILITY',
-    getValue: (p) => p.jobPreferences.noticePeriod,
+    getValue: (p, field) => {
+      const np = p.jobPreferences.noticePeriod || '';
+      if (field.fieldType === 'number' || /in\s*days/i.test(field.detectedLabel)) {
+        const match = np.match(/\d+/);
+        if (match) return match[0];
+        if (/immediate/i.test(np)) return '0';
+        if (/month/i.test(np)) return '30';
+        return '15';
+      }
+      return np;
+    },
     confidence: 0.98
   },
   // Willing to Relocate
@@ -624,7 +835,7 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
 
   // 2. Comfort with the job location / Relocation preference
   if (
-    /\b(?:comfort\s*with\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*(?:with|working\s*in)\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*with\s*(?:this|the)\s*location|location\s*preference|relocation\s*preference)\b/i.test(combinedContext)
+    /\b(?:comfort\s*with\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*(?:with|working\s*in)\s*(?:the\s*)?(?:job\s*)?location|comfortable\s*with\s*(?:this|the)\s*location|relocation\s*preference)\b/i.test(combinedContext)
   ) {
     const isWilling = profile.jobPreferences?.willingToRelocate ?? true;
     let val: string | boolean = isWilling ? 'Yes' : 'No';
@@ -1014,9 +1225,96 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
     };
   }
 
+  // Explicit Safety Invariants: Candidate Consent & Captcha must never be auto-filled or auto-accepted
+  if (
+    field.htmlId === 'candidateConsent' ||
+    field.name === 'candidateConsent' ||
+    /candidateconsent|consentlabel|data\s*processing\s*terms/i.test(combinedContext)
+  ) {
+    return {
+      ...field,
+      category: 'UNKNOWN',
+      confidence: 0.0,
+      confidenceLevel: 'LOW',
+      source: 'manual',
+      suggestedValue: null,
+      userValue: undefined,
+      requiresConfirmation: true,
+      approved: false,
+      explanation: 'Data processing terms and consent — must be manually accepted by the candidate.'
+    };
+  }
+
+  if (
+    field.htmlId === 'captcha' ||
+    field.name === 'captcha' ||
+    /\bcaptcha\b/i.test(combinedContext)
+  ) {
+    return {
+      ...field,
+      category: 'UNKNOWN',
+      confidence: 0.0,
+      confidenceLevel: 'LOW',
+      source: 'manual',
+      suggestedValue: null,
+      userValue: undefined,
+      requiresConfirmation: true,
+      approved: false,
+      explanation: 'CAPTCHA verification challenge — must be completed manually.'
+    };
+  }
+
+  // Gender
+  if (
+    field.htmlId === 'gender' ||
+    field.name === 'gender' ||
+    /^(?:gender|sex)$/i.test(label) ||
+    /\bgender\b/i.test(combinedContext)
+  ) {
+    const candidateGender = profile.personal?.gender;
+    if (candidateGender) {
+      let val: string = candidateGender;
+      if (field.options && field.options.length > 0) {
+        const normGender = normalizeOptionText(candidateGender);
+        const matched = field.options.find(
+          (o) => normalizeOptionText(o.label) === normGender || normalizeOptionText(o.value) === normGender
+        );
+        if (matched) {
+          val = matched.value || matched.label;
+        }
+      }
+      return {
+        ...field,
+        suggestedProfileField: 'personal.gender',
+        category: 'DEMOGRAPHIC',
+        confidence: 0.95,
+        confidenceLevel: 'HIGH',
+        source: 'deterministic',
+        suggestedValue: val,
+        userValue: val,
+        requiresConfirmation: false,
+        explanation: `Matched verified candidate gender (${candidateGender}) from profile.`
+      };
+    } else {
+      return {
+        ...field,
+        suggestedProfileField: 'personal.gender',
+        category: 'DEMOGRAPHIC',
+        confidence: 0.1,
+        confidenceLevel: 'LOW',
+        source: 'manual',
+        suggestedValue: null,
+        userValue: undefined,
+        requiresConfirmation: true,
+        approved: false,
+        explanation: 'Gender is not specified in candidate profile. Please select manually.'
+      };
+    }
+  }
+
   // Demographics or protected categories: NEVER infer, confidence LOW, require user input
   if (
-    /veteran|military|disability|race|ethnicity|gender|sexual\s*orientation/i.test(
+    /veteran|military|disability|race|ethnicity|sexual\s*orientation/i.test(
       combinedContext
     )
   ) {
@@ -1032,7 +1330,97 @@ export function mapFieldToProfile(field: DetectedField, profile: UserProfile): D
     };
   }
 
-  // Salary expectation
+  // Salary Currency
+  if (
+    field.htmlId === 'expectedSalary.currency' ||
+    field.name === 'expectedSalary.currency' ||
+    field.htmlId === 'currentSalary.currency' ||
+    field.name === 'currentSalary.currency' ||
+    (/\bcurrency\b/i.test(combinedContext) && /\bsalary\b/i.test(combinedContext))
+  ) {
+    const curr = profile.jobPreferences?.salaryCurrency || 'INR';
+    let val: string = curr;
+    if (field.options && field.options.length > 0) {
+      const normCurr = normalizeOptionText(curr);
+      const matched = field.options.find(
+        (o) => normalizeOptionText(o.label) === normCurr || normalizeOptionText(o.value) === normCurr
+      );
+      if (matched) {
+        val = matched.value || matched.label;
+      }
+    }
+    return {
+      ...field,
+      suggestedProfileField: 'jobPreferences.salaryCurrency',
+      category: 'SALARY',
+      confidence: 0.95,
+      confidenceLevel: 'HIGH',
+      source: 'deterministic',
+      suggestedValue: val,
+      userValue: val,
+      requiresConfirmation: false,
+      explanation: `Matched verified salary currency (${curr}) from preferences.`
+    };
+  }
+
+  // Current Salary Amount
+  if (
+    field.htmlId === 'currentSalary' ||
+    field.name === 'currentSalary.amount' ||
+    /\bcurrent\s*(?:salary|ctc|compensation|pay)\b/i.test(combinedContext)
+  ) {
+    return {
+      ...field,
+      suggestedProfileField: 'currentSalary',
+      category: 'SALARY',
+      confidence: 0.2,
+      confidenceLevel: 'LOW',
+      source: 'manual',
+      suggestedValue: null,
+      userValue: undefined,
+      requiresConfirmation: true,
+      approved: false,
+      explanation: 'Current salary is not configured in profile. Please review and enter manually.'
+    };
+  }
+
+  // Expected Salary Amount
+  if (
+    field.htmlId === 'expectedSalary' ||
+    field.name === 'expectedSalary.amount' ||
+    /\bexpected\s*(?:salary|ctc|compensation|pay)\b/i.test(combinedContext)
+  ) {
+    const expMin = profile.jobPreferences?.expectedSalaryMin;
+    if (expMin !== null && expMin !== undefined && String(expMin).trim() !== '') {
+      return {
+        ...field,
+        suggestedProfileField: 'jobPreferences.expectedSalaryMin',
+        category: 'SALARY',
+        confidence: 0.95,
+        confidenceLevel: 'HIGH',
+        source: 'deterministic',
+        suggestedValue: String(expMin),
+        userValue: String(expMin),
+        requiresConfirmation: false,
+        explanation: `Matched expected salary from job preferences: ${expMin}`
+      };
+    }
+    return {
+      ...field,
+      suggestedProfileField: 'jobPreferences.expectedSalaryMin',
+      category: 'SALARY',
+      confidence: 0.2,
+      confidenceLevel: 'LOW',
+      source: 'manual',
+      suggestedValue: null,
+      userValue: undefined,
+      requiresConfirmation: true,
+      approved: false,
+      explanation: 'Expected salary is not configured in Job Preferences. Please review and enter manually.'
+    };
+  }
+
+  // Salary expectation generic fallback
   if (/salary|compensation|desired\s*pay|expected\s*ctc/i.test(combinedContext)) {
     return {
       ...field,

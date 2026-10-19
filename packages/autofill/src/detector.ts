@@ -24,7 +24,7 @@ export function isExtensionUI(el: Element | null): boolean {
 /**
  * Filter out bogus titles like "Approve", "Enter value...", "Your answer", etc.
  */
-export const BOGUS_TITLE_REGEX = /^(?:approve|enter\s*value(?:\.\.\.)?|select\s*choice.*|your\s*answer|short\s*answer(?:\s*text)?|long\s*answer(?:\s*text)?|other\s*response|submit|clear\s*form|page\s*\d+\s*of\s*\d+|required\s*question|\*)$/i;
+export const BOGUS_TITLE_REGEX = /^(?:approve|enter\s*value(?:\.\.\.)?|select(?:\s*(?:an?\s*)?option)?|choose(?:\s*(?:an?\s*)?option)?|select\s*choice.*|your\s*answer|short\s*answer(?:\s*text)?|long\s*answer(?:\s*text)?|other\s*response|submit|clear\s*form|page\s*\d+\s*of\s*\d+|required\s*question|\*)$/i;
 
 export interface DetectionDiagnostics {
   rawCandidates: number;
@@ -278,6 +278,27 @@ export function detectFormFields(
     const htmlEl = el as HTMLElement;
     const role = htmlEl.getAttribute('role')?.toLowerCase();
     const tagName = htmlEl.tagName.toLowerCase();
+
+    // Skip Select2 helper elements and search inputs
+    if (
+      htmlEl.classList?.contains('select2-search__field') ||
+      role === 'searchbox' ||
+      (typeof htmlEl.closest === 'function' && htmlEl.closest('.select2-container'))
+    ) {
+      continue;
+    }
+
+    // Skip static decorative readonly inputs (e.g. Keka's <input value="Years" readonly /> or "Months")
+    if (
+      tagName === 'input' &&
+      (htmlEl as HTMLInputElement).readOnly &&
+      !htmlEl.id &&
+      !htmlEl.getAttribute('name') &&
+      /^(?:years|months|days|currency)$/i.test((htmlEl as HTMLInputElement).value?.trim() || '')
+    ) {
+      continue;
+    }
+
     const isRadio = role === 'radio' || (tagName === 'input' && (htmlEl as HTMLInputElement).type === 'radio');
 
     // Skip helper "Other response" text inputs
@@ -605,22 +626,43 @@ export function resolveLabel(el: HTMLElement): string {
 
   const doc = el.ownerDocument || (typeof document !== 'undefined' ? document : null);
 
-  // 2. Explicit <label for="id">
+  // 2. Explicit <label for="id"> (including data-content and prefix matching e.g. for composite IDs)
   if (el.id && doc && typeof doc.querySelector === 'function') {
-    const labelElem = doc.querySelector(`label[for="${escapeCSS(el.id)}"]`);
-    if (labelElem && labelElem.textContent?.trim()) {
-      const text = cleanText(labelElem.textContent);
-      if (!BOGUS_TITLE_REGEX.test(text)) return text;
+    let labelElem = doc.querySelector(`label[for="${escapeCSS(el.id)}"]`);
+    if (!labelElem && el.id.includes('.')) {
+      const prefix = el.id.split('.')[0];
+      labelElem = doc.querySelector(`label[for="${escapeCSS(prefix)}"]`);
+      if (!labelElem && prefix === 'mobilePhone') {
+        labelElem = doc.querySelector('label[for="phone"]');
+      }
+    }
+    if (labelElem) {
+      const dataContent = labelElem.getAttribute('data-content');
+      if (dataContent && dataContent.trim()) {
+        const text = cleanText(dataContent);
+        if (!BOGUS_TITLE_REGEX.test(text)) return text;
+      }
+      if (labelElem.textContent?.trim()) {
+        const text = cleanText(labelElem.textContent);
+        if (!BOGUS_TITLE_REGEX.test(text)) return text;
+      }
     }
   }
 
   // 3. Parent/ancestor <label>
   const parentLabel = el.closest('label');
-  if (parentLabel && parentLabel.textContent?.trim()) {
-    const clone = parentLabel.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll('input, select, textarea, button').forEach((child) => child.remove());
-    const labelText = cleanText(clone.textContent || '');
-    if (labelText && !BOGUS_TITLE_REGEX.test(labelText)) return labelText;
+  if (parentLabel) {
+    const dataContent = parentLabel.getAttribute('data-content');
+    if (dataContent && dataContent.trim()) {
+      const text = cleanText(dataContent);
+      if (!BOGUS_TITLE_REGEX.test(text)) return text;
+    }
+    if (parentLabel.textContent?.trim()) {
+      const clone = parentLabel.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('input, select, textarea, button').forEach((child) => child.remove());
+      const labelText = cleanText(clone.textContent || '');
+      if (labelText && !BOGUS_TITLE_REGEX.test(labelText)) return labelText;
+    }
   }
 
   // 4. aria-labelledby
@@ -663,15 +705,22 @@ export function resolveLabel(el: HTMLElement): string {
     }
   }
 
-  // 7. Closest container label/heading
-  const container = el.closest('.form-group, .field, .form-row, .form-item, section');
+  // 7. Closest container label/heading (including data-content support)
+  const container = el.closest('.form-group, .field, .form-row, .form-item, section, .validation');
   if (container) {
     const candidateLabel = container.querySelector(
       'label, [class*="label"], [data-automation-id*="label"], h3, h4, strong'
     );
-    if (candidateLabel && candidateLabel !== el && candidateLabel.textContent?.trim()) {
-      const text = cleanText(candidateLabel.textContent);
-      if (!BOGUS_TITLE_REGEX.test(text)) return text;
+    if (candidateLabel && candidateLabel !== el) {
+      const dataContent = (candidateLabel as HTMLElement).getAttribute('data-content');
+      if (dataContent && dataContent.trim()) {
+        const text = cleanText(dataContent);
+        if (!BOGUS_TITLE_REGEX.test(text)) return text;
+      }
+      if (candidateLabel.textContent?.trim()) {
+        const text = cleanText(candidateLabel.textContent);
+        if (!BOGUS_TITLE_REGEX.test(text)) return text;
+      }
     }
   }
 

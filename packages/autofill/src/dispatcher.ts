@@ -64,6 +64,15 @@ export function setNativeValue(
   if (isExtensionUI(element)) return false;
   if (isInputElem(element) && element.type === 'hidden') return false;
 
+  // Invariant: Never auto-check consent checkboxes or auto-solve CAPTCHAs
+  if (
+    element.id === 'candidateConsent' ||
+    element.id === 'captcha' ||
+    (typeof element.getAttribute === 'function' && element.getAttribute('name') === 'candidateConsent')
+  ) {
+    return false;
+  }
+
   try {
     const role = typeof element.getAttribute === 'function' ? element.getAttribute('role')?.toLowerCase() : undefined;
     const tagName = element.tagName ? element.tagName.toLowerCase() : '';
@@ -129,7 +138,10 @@ export function setNativeValue(
 
     // 3. Native Text / Email / Tel / Number / Date Input (and Google Forms text input)
     if (isInputElem(element) || tagName === 'input') {
-      const stringValue = String(value);
+      let stringValue = String(value);
+      if ((element as any).type === 'number') {
+        stringValue = stringValue.replace(/[^\d.-]/g, '');
+      }
       try {
         if (typeof element.focus === 'function') element.focus();
         element.dispatchEvent(new Event('focus', { bubbles: true }));
@@ -262,27 +274,101 @@ export function setNativeValue(
       const strVal = String(value).toLowerCase().trim();
       let matchedIndex = -1;
 
+      // Pass 1: Exact match on value or label
       for (let i = 0; i < element.options.length; i++) {
         const opt = element.options[i];
         const optVal = opt.value.toLowerCase().trim();
-        const optText = opt.text.toLowerCase().trim();
-        if (optVal === strVal || optText === strVal || optText.includes(strVal) || strVal.includes(optText)) {
+        const optText = (opt.text || (opt as any).label || '').toLowerCase().trim();
+        if (optVal === strVal || optText === strVal) {
           matchedIndex = i;
           break;
         }
       }
 
+      // Pass 2: Normalized match
+      if (matchedIndex === -1) {
+        const normTarget = normalizeOptionText(strVal);
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const normVal = normalizeOptionText(opt.value);
+          const normText = normalizeOptionText(opt.text || (opt as any).label || '');
+          if (normVal === normTarget || normText === normTarget) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
+      // Pass 3: Substring match (excluding generic "select" options)
+      if (matchedIndex === -1 && strVal.length > 1) {
+        for (let i = 0; i < element.options.length; i++) {
+          const opt = element.options[i];
+          const optVal = opt.value.toLowerCase().trim();
+          const optText = (opt.text || (opt as any).label || '').toLowerCase().trim();
+          if (optVal && (optVal.includes(strVal) || strVal.includes(optVal))) {
+            matchedIndex = i;
+            break;
+          }
+          if (optText && !optText.startsWith('select') && (optText.includes(strVal) || strVal.includes(optText))) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
       if (matchedIndex !== -1) {
         element.selectedIndex = matchedIndex;
+        try {
+          element.value = element.options[matchedIndex].value;
+        } catch {}
+
         element.dispatchEvent(new Event('change', { bubbles: true }));
         element.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Trigger Select2 custom event if Select2 is listening
+        try {
+          element.dispatchEvent(new CustomEvent('select2:select', {
+            bubbles: true,
+            detail: { data: { id: element.value, text: element.options[matchedIndex].text } }
+          }));
+        } catch {}
+
+        // Update Select2 rendered text container if present in DOM
+        try {
+          const doc = element.ownerDocument;
+          if (element.id && doc) {
+            const cleanId = element.id.replace(/([!"#$%&'()*+,.\/:;<=>?@[\\\]^`{|}~])/g, '\\$1');
+            const s2Container = doc.querySelector(`#select2-${cleanId}-container, [aria-labelledby="select2-${cleanId}-container"]`);
+            if (s2Container) {
+              s2Container.textContent = element.options[matchedIndex].text;
+              s2Container.setAttribute('title', element.options[matchedIndex].text);
+            }
+          }
+        } catch {}
+
         dispatchBlurEvent(element);
-        return true;
+
+        // Verification step
+        const isVerified = element.selectedIndex === matchedIndex || element.value === element.options[matchedIndex].value;
+        return isVerified;
       }
+      return false;
     }
 
     // 7. ARIA Combobox / Listbox
     if ((role === 'combobox' || role === 'listbox') && typeof element.querySelectorAll === 'function') {
+      // If element is a Select2 selection container, delegate to the underlying <select>
+      const doc = element.ownerDocument;
+      if (doc && element.classList?.contains('select2-selection')) {
+        const parentS2 = element.closest('.select2-container');
+        if (parentS2) {
+          const prevSelect = parentS2.previousElementSibling;
+          if (prevSelect && isSelectElem(prevSelect)) {
+            return setNativeValue(prevSelect as HTMLElement, value);
+          }
+        }
+      }
+
       const strVal = String(value).toLowerCase().trim();
       const options = Array.from(element.querySelectorAll('[role="option"], [role="menuitem"]'));
       for (const opt of options) {

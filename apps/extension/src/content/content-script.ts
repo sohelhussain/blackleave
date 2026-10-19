@@ -181,6 +181,24 @@ function resolveTargetControl(field: DetectedField): HTMLElement | null {
     return null;
   };
 
+  // 0. By explicit semantic htmlId (when not a generic Google Form token like i1, i5)
+  if (field.htmlId && !/^i\d+$/i.test(field.htmlId)) {
+    const elem = document.getElementById(field.htmlId);
+    if (elem && isCandidateValid(elem)) {
+      const isInteractive =
+        elem instanceof HTMLInputElement ||
+        elem instanceof HTMLTextAreaElement ||
+        elem instanceof HTMLSelectElement ||
+        elem.getAttribute('role') === 'radio' ||
+        elem.getAttribute('role') === 'radiogroup' ||
+        elem.getAttribute('role') === 'checkbox' ||
+        elem.getAttribute('role') === 'textbox';
+      if (isInteractive) return elem;
+      const child = findInteractiveChild(elem);
+      if (child) return child;
+    }
+  }
+
   // 1. By ariaLabelledBy / heading ID if available
   if (field.ariaLabelledBy) {
     const heading = document.getElementById(field.ariaLabelledBy);

@@ -34,6 +34,8 @@ export interface PersonalInfo {
   pincode: string;
   address?: string;
   postalCode?: string;
+  middleName?: string | null;
+  phoneCountryCode?: string | null;
   linkedin: string;
   github: string;
   portfolio: string;
