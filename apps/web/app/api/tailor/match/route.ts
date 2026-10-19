@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isClientSupplied = Boolean(parsed.data.profileContext);
     let profile = parsed.data.profileContext as UserProfile | undefined;
     if (!profile) {
       const userId = await getAuthenticatedUserId(req);
@@ -62,7 +63,9 @@ export async function POST(req: NextRequest) {
       parsed.data.companyName
     );
 
-    const matchAnalysis = computeJobMatchAnalysis(requirements, profile);
+    const matchAnalysis = computeJobMatchAnalysis(requirements, profile, {
+      isVerified: !isClientSupplied
+    });
 
     return NextResponse.json({
       success: true,

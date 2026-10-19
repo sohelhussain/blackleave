@@ -1,15 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { INITIAL_SOHEL_PROFILE } from '@applyflow/types';
+import type { UserProfile } from '@applyflow/types';
 import {
   extractRequirementsFromText,
   computeJobMatchAnalysis,
+  parseYearMonth,
+  calculateExperienceDuration,
   ResumeTailorService
 } from '../dist/index.js';
 import {
   JobMatchAnalysisSchema,
   TailoredResumeDraftSchema
 } from '@applyflow/validators';
+
+const HEADOUT_FRONTEND_ENGINEER_JD = `
+Title: Software Engineer, Web (Frontend)
+Company: Headout
+Location: Bangalore / Remote
+About Headout:
+Headout is building the world's leading travel experiences marketplace, helping millions discover and book tours, attractions, and activities globally.
+
+Responsibilities:
+- Build and maintain high-performance, accessible, and responsive user-facing web applications.
+- Collaborate with designers and product managers to deliver delighting user experiences.
+- Optimize frontend web performance, ensuring sub-second page loads and high Core Web Vitals.
+- Ensure cross-browser compatibility across Chrome, Safari, Firefox, and mobile rendering engines.
+- Architect modular frontend state management and integrate with REST APIs.
+
+Requirements:
+- 3+ years of professional frontend web engineering experience.
+- Strong proficiency in modern JavaScript (ES6+), TypeScript, and React.
+- Solid mastery of HTML5, modern CSS3, and Responsive Design principles.
+- Demonstrated experience with Cross-Browser Compatibility and performance optimization.
+- Experience consuming and integrating RESTful APIs and managing complex client-side state.
+- Bachelor's or Master's degree in Computer Science, Engineering, or a related technical discipline.
+
+Preferred Qualifications:
+- Experience with Next.js, Tailwind CSS, and WebSockets.
+- Familiarity with automated unit testing (Jest/Vitest) and end-to-end testing frameworks.
+`;
 
 const SAMPLE_BACKEND_JD = `
 Title: Senior Backend Distributed Systems Engineer
@@ -167,4 +197,243 @@ test('Resume Tailor Service - reorders most relevant projects and experience fir
   }, INITIAL_SOHEL_PROFILE);
   assert.ok(frontendDraft.projects.length > 0);
   assert.ok(frontendDraft.highlightedSkills.some(s => s.toLowerCase().includes('react') || s.toLowerCase().includes('typescript')));
+});
+
+test('Matching Engine - extracts complete Headout Frontend Engineer requirements', () => {
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+
+  assert.strictEqual(reqs.jobTitle, 'Frontend Engineer');
+  assert.strictEqual(reqs.company, 'Headout');
+  assert.strictEqual(reqs.minYearsExperience, 3);
+  assert.strictEqual(reqs.educationRequirements.length > 0, true);
+
+  // Must extract core tech
+  assert.ok(reqs.requiredSkills.includes('React'));
+  assert.ok(reqs.requiredSkills.includes('TypeScript'));
+  assert.ok(reqs.requiredSkills.includes('JavaScript'));
+  assert.ok(reqs.requiredSkills.includes('HTML5 & CSS3'));
+
+  // Must extract domain competencies
+  assert.ok(reqs.requiredSkills.includes('Cross-Browser Compatibility'), 'Cross-Browser Compatibility must be extracted');
+  assert.ok(reqs.requiredSkills.includes('Frontend Performance Optimization'), 'Frontend Performance Optimization must be extracted');
+  assert.ok(reqs.requiredSkills.includes('Responsive Design'), 'Responsive Design must be extracted');
+  assert.ok(reqs.requiredSkills.includes('REST APIs'), 'REST APIs must be extracted');
+  assert.ok(reqs.requiredSkills.includes('State Management'), 'State Management must be extracted');
+
+  // Must extract preferred requirements
+  assert.ok(reqs.preferredSkills.includes('Next.js'));
+  assert.ok(reqs.preferredSkills.includes('Tailwind CSS'));
+  assert.ok(reqs.preferredSkills.includes('WebSockets'));
+  assert.ok(reqs.preferredSkills.includes('Automated Testing'));
+});
+
+test('Matching Engine - calculates experience duration strictly from supported employment dates', () => {
+  // Test 1: Empty roles
+  const emptyRes = calculateExperienceDuration([]);
+  assert.strictEqual(emptyRes.hasSupportedDates, false);
+  assert.strictEqual(emptyRes.totalMonths, 0);
+
+  // Test 2: Role with missing dates
+  const noDatesRes = calculateExperienceDuration([
+    { title: 'Frontend Engineer', startDate: '', endDate: '' }
+  ]);
+  assert.strictEqual(noDatesRes.hasSupportedDates, false);
+  assert.strictEqual(noDatesRes.unverifiedRolesCount, 1);
+
+  // Test 3: Supported dates (e.g. 01/2023 to 12/2023 = 12 months = 1.0 year)
+  const validRes = calculateExperienceDuration([
+    { title: 'Software Engineer', startDate: '01/2023', endDate: '12/2023' }
+  ]);
+  assert.strictEqual(validRes.hasSupportedDates, true);
+  assert.strictEqual(validRes.totalMonths, 12);
+  assert.strictEqual(validRes.totalYears, 1.0);
+
+  // Test 4: Overlapping dates merge correctly
+  const overlapRes = calculateExperienceDuration([
+    { title: 'Software Engineer 1', startDate: '2023-01', endDate: '2023-06' },
+    { title: 'Software Engineer 2', startDate: '2023-04', endDate: '2023-12' }
+  ]);
+  assert.strictEqual(overlapRes.hasSupportedDates, true);
+  assert.strictEqual(overlapRes.totalMonths, 12); // Jan-Dec = 12 months, not 6+9=15
+});
+
+test('Matching Engine - incomplete profile with missing employment dates receives UNVERIFIED status and low experience score', () => {
+  const incompleteProfile: UserProfile = {
+    ...INITIAL_SOHEL_PROFILE,
+    experience: [
+      {
+        id: 'exp_no_dates_1',
+        company: 'Startup A',
+        title: 'Frontend Engineer',
+        employmentType: 'Full-time',
+        location: 'Remote',
+        workMode: 'Remote',
+        startDate: '', // Missing start date!
+        endDate: null,
+        current: false,
+        responsibilities: ['Built user interfaces in React'],
+        technologies: ['React']
+      }
+    ],
+    projects: [],
+    education: []
+  };
+
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+  const analysis = computeJobMatchAnalysis(reqs, incompleteProfile, { isVerified: false });
+
+  // Experience must receive UNVERIFIED qualification and score capped at baseline (<=30)
+  const expBreakdown = analysis.scoreBreakdown.find(b => b.id === 'experience');
+  assert.ok(expBreakdown, 'Experience breakdown exists');
+  assert.ok(expBreakdown.score <= 30, `Experience score must be <= 30 when dates missing, got ${expBreakdown.score}`);
+
+  const expQual = analysis.qualifications.find(q => q.type === 'experience');
+  assert.ok(expQual, 'Experience qualification exists');
+  assert.strictEqual(expQual.status, 'UNVERIFIED');
+  assert.ok(expQual.evidence?.includes('omitted due to missing') || expQual.evidence?.includes('none contain valid'));
+
+  // Gaps must warn about missing dates
+  assert.ok(analysis.gaps.some(g => g.toLowerCase().includes('date')), 'Gaps must cite missing dates');
+
+  // Overall score must NOT be 100%!
+  assert.ok(analysis.overallScore < 50, `Overall score for incomplete profile should be < 50%, got ${analysis.overallScore}%`);
+});
+
+test('Matching Engine - unevidenced competencies (Cross-Browser, Performance) cannot be marked SUPPORTED', () => {
+  const profileWithoutCompetencies: UserProfile = {
+    ...INITIAL_SOHEL_PROFILE,
+    skills: {
+      programming: ['JavaScript', 'TypeScript'],
+      frontend: ['React'],
+      backend: [],
+      database: [],
+      infrastructure: [],
+      blockchain: [],
+      realtime: [],
+      auth: [],
+      other: []
+    },
+    // Strip bullets that mention performance or cross-browser
+    experience: [
+      {
+        id: 'exp_simple',
+        company: 'Dev Co',
+        title: 'Software Engineer',
+        employmentType: 'Full-time',
+        location: 'Remote',
+        workMode: 'Remote',
+        startDate: '2023-01',
+        endDate: '2024-01',
+        current: false,
+        responsibilities: ['Created simple forms and button components'],
+        technologies: ['React', 'JavaScript']
+      }
+    ],
+    projects: []
+  };
+
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+  const analysis = computeJobMatchAnalysis(reqs, profileWithoutCompetencies, { isVerified: false });
+
+  // Cross-Browser Compatibility MUST be MISSING
+  const crossBrowserQual = analysis.qualifications.find(q => q.name === 'Cross-Browser Compatibility');
+  assert.ok(crossBrowserQual, 'Cross-Browser Compatibility qualification present');
+  assert.strictEqual(crossBrowserQual.status, 'MISSING');
+  assert.ok(crossBrowserQual.evidence?.includes('No evidence of Cross-Browser Compatibility'));
+  assert.ok(analysis.missingSkills.includes('Cross-Browser Compatibility'));
+
+  // Performance Optimization MUST be MISSING
+  const perfQual = analysis.qualifications.find(q => q.name === 'Frontend Performance Optimization');
+  assert.ok(perfQual, 'Performance qualification present');
+  assert.strictEqual(perfQual.status, 'MISSING');
+  assert.ok(analysis.missingSkills.includes('Frontend Performance Optimization'));
+
+  // Missing competencies must never silently receive full credit
+  const reqSkillsBreakdown = analysis.scoreBreakdown.find(b => b.id === 'requiredSkills');
+  assert.ok(reqSkillsBreakdown!.score < 60, `Required skills score cannot be high when competencies missing, got ${reqSkillsBreakdown!.score}`);
+});
+
+test('Matching Engine - candidate data provenance distinguishes Reported from Verified claims', () => {
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+
+  // 1. Client-supplied context (isVerified: false)
+  const clientSuppliedAnalysis = computeJobMatchAnalysis(reqs, INITIAL_SOHEL_PROFILE, { isVerified: false });
+  const clientSupported = clientSuppliedAnalysis.qualifications.filter(q => q.status === 'SUPPORTED' && q.type === 'skill');
+  assert.ok(clientSupported.length > 0);
+  for (const q of clientSupported) {
+    assert.ok(
+      q.evidence?.startsWith('Reported in') || q.evidence?.includes('Reported'),
+      `Client-supplied qualification evidence must start with Reported, got: ${q.evidence}`
+    );
+  }
+
+  // 2. Database-verified context (isVerified: true)
+  const dbVerifiedAnalysis = computeJobMatchAnalysis(reqs, INITIAL_SOHEL_PROFILE, { isVerified: true });
+  const dbSupported = dbVerifiedAnalysis.qualifications.filter(q => q.status === 'SUPPORTED' && q.type === 'skill');
+  assert.ok(dbSupported.length > 0);
+  for (const q of dbSupported) {
+    assert.ok(
+      q.evidence?.startsWith('Verified in') || q.evidence?.includes('Verified'),
+      `Database-verified qualification evidence must start with Verified, got: ${q.evidence}`
+    );
+  }
+});
+
+test('Matching Engine - non-technical degree branch receives PARTIAL credit instead of full credit', () => {
+  const nonTechnicalEduProfile: UserProfile = {
+    ...INITIAL_SOHEL_PROFILE,
+    education: [
+      {
+        id: 'edu_ba_history',
+        degree: 'Bachelor of Arts',
+        branch: 'History and Philosophy',
+        university: 'State University',
+        location: 'City',
+        startDate: '2019',
+        endDate: '2023',
+        expectedGraduation: '2023',
+        cgpa: 8.5,
+        percentage: null,
+        stream: null
+      }
+    ]
+  };
+
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+  const analysis = computeJobMatchAnalysis(reqs, nonTechnicalEduProfile);
+
+  const eduBreakdown = analysis.scoreBreakdown.find(b => b.id === 'education');
+  assert.ok(eduBreakdown);
+  assert.strictEqual(eduBreakdown.score, 50, 'Non-CS degree should receive 50% partial credit, not 100%');
+
+  const eduQual = analysis.qualifications.find(q => q.type === 'education');
+  assert.ok(eduQual);
+  assert.strictEqual(eduQual.status, 'PARTIAL');
+  assert.ok(eduQual.evidence?.includes('does not explicitly match Computer Science or Engineering'));
+});
+
+test('Matching Engine - genuine candidate profile computes accurate, evidence-backed compatibility score without inflation', () => {
+  const reqs = extractRequirementsFromText(HEADOUT_FRONTEND_ENGINEER_JD);
+  const analysis = computeJobMatchAnalysis(reqs, INITIAL_SOHEL_PROFILE, { isVerified: true });
+
+  // Analysis must validate against schema
+  const parsed = JobMatchAnalysisSchema.safeParse(analysis);
+  assert.ok(parsed.success, `Schema validation error: ${JSON.stringify(parsed.error)}`);
+
+  // Genuine profile has React, TypeScript, REST APIs, Tailwind CSS evidenced in Saurce/NexaBank
+  assert.ok(analysis.matchingSkills.includes('React'));
+  assert.ok(analysis.matchingSkills.includes('TypeScript'));
+  assert.ok(analysis.matchingSkills.includes('REST APIs'));
+
+  // But Sohel profile only has ~10 months professional experience against 3+ years required
+  const expBreakdown = analysis.scoreBreakdown.find(b => b.id === 'experience')!;
+  assert.ok(expBreakdown.score < 80, `Experience score (${expBreakdown.score}) must reflect verified duration vs 3+ years requirement`);
+
+  // Overall score must be honest and non-100% (typically 65-75%)
+  assert.ok(analysis.overallScore > 50 && analysis.overallScore < 95, `Overall score (${analysis.overallScore}%) must be transparent and non-inflated`);
+
+  // All strengths and gaps must be populated
+  assert.ok(analysis.strengths.length > 0);
+  assert.ok(analysis.gaps.length > 0);
+  assert.ok(analysis.recommendedFocus.length > 0);
 });

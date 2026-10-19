@@ -28,6 +28,7 @@ tailorRouter.post('/match', optionalAuthMiddleware, async (req: AuthenticatedReq
     return res.status(400).json({ error: parsed.error.format() });
   }
 
+  const isClientSupplied = Boolean(parsed.data.profileContext);
   const profile = parsed.data.profileContext || req.profile || (req.user ? await getProfileForUser(req.user.id) : null);
   if (!profile) {
     return res.status(401).json({
@@ -41,7 +42,9 @@ tailorRouter.post('/match', optionalAuthMiddleware, async (req: AuthenticatedReq
       parsed.data.jobTitle,
       parsed.data.companyName
     );
-    const matchAnalysis = computeJobMatchAnalysis(requirements, profile as UserProfile);
+    const matchAnalysis = computeJobMatchAnalysis(requirements, profile as UserProfile, {
+      isVerified: !isClientSupplied
+    });
 
     return res.json({
       success: true,
